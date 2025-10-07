@@ -73,6 +73,71 @@ if uploaded_file is not None:
         
         st.divider()
         
+        # === REVENUE ANALYSIS ===
+        from analysis.revenue_analyzer import extract_business_from_revenue
+        
+        # extract revenue from data
+        business_name, revenue_per_business, revenue_df = extract_business_from_revenue(df)
+        
+        if len(business_name) > 0:
+            st.subheader("Revenue Analysis")
+            
+            col1, col2 = st.columns([1,2])
+            
+            with col1:
+                st.write("Total Revenue per Business:")
+                
+                # create dataFrame for visualization
+                revenue_display = pd.DataFrame({
+                    "Business": revenue_per_business.index,
+                    "Total Revenue": revenue_per_business.values
+                })
+                
+                revenue_display = revenue_display.sort_values("Total Revenue", ascending=False)
+                
+                # show dataframe
+                
+                st.dataframe(
+                    revenue_display.style.format({"Total Revenue": "${:,.2f}"}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Top performer
+                top_business = revenue_display.iloc[0]
+                st.success(f"🏆 Top Performer: **{top_business['Business']}** (${top_business['Total Revenue']:,.2f})")
+                
+                
+            with col2:
+                st.write("Revenue Distribution:")
+                
+                import plotly.express as px
+                
+                fig = px.bar(
+                    revenue_display,
+                    x="Business",
+                    y="Total Revenue",
+                    title="Revenue by Business",
+                    color="Total Revenue",
+                    color_continuous_scale="Viridis"
+                )
+                
+                fig.update_layout(
+                    showlegend=False,
+                    height=400,
+                    xaxis_title="",
+                    yaxis_title="Revenue ($)"
+                )
+                
+                fig.update_yaxes(tickformat='$,.0f')
+                st.plotly_chart(fig, use_container_width=True)
+            st.divider()
+        
+        else:
+            st.info("💡 No revenue data found in this file")
+            st.divider()
+    
+        
         # Tabs for different views
         tab1, tab2, tab3 = st.tabs(["📋 Data Preview", "📊 Statistics", "🔍 Filters"])
         
