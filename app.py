@@ -6,6 +6,9 @@ Main Streamlit Application
 import streamlit as st
 import pandas as pd
 from core.data_cleaner import clean_big_ambitions_csv
+from analysis.revenue_analyzer import extract_business_from_revenue
+from analysis.profit_loss import calculate_profit_loss
+
 
 # Page Configuration
 st.set_page_config(
@@ -42,6 +45,9 @@ if uploaded_file is not None:
     else:
         st.success(f"✅ Successfully processed {len(df):,} transactions!")
         
+        
+        
+        
         # Main Metrics
         st.subheader("📊 Overview")
         col1, col2, col3, col4 = st.columns(4)
@@ -72,9 +78,9 @@ if uploaded_file is not None:
             )
         
         st.divider()
+
         
-        # === REVENUE ANALYSIS ===
-        from analysis.revenue_analyzer import extract_business_from_revenue
+
         
         # extract revenue from data
         business_name, revenue_per_business, revenue_df = extract_business_from_revenue(df)
@@ -132,11 +138,54 @@ if uploaded_file is not None:
                 fig.update_yaxes(tickformat='$,.0f')
                 st.plotly_chart(fig, use_container_width=True)
             st.divider()
+            
+
+            
+            # === P&L ANALYSIS ===
+            st.subheader("💰 Profit & Loss Analysis")
+            
+            with st.spinner('📊 Calculating P&L for each business...'):
+                try:
+                    pl_df = calculate_profit_loss(df)
+                    
+                    # Ordina per profit (dal più alto al più basso)
+                    pl_df = pl_df.sort_values('profit', ascending=False)
+                    
+                    # Mostra tabella P&L
+                    st.write("**Complete P&L Statement:**")
+                    st.dataframe(
+                        pl_df.style.format({
+                            'revenue': '${:,.2f}',
+                            'shared_revenue_based': '${:,.2f}',
+                            'shared_equal_split': '${:,.2f}',
+                            'wages': '${:,.2f}',
+                            'marketing': '${:,.2f}',
+                            'health_insurance': '${:,.2f}',
+                            'hr_training': '${:,.2f}',
+                            'total_direct_costs': '${:,.2f}',
+                            'total_shared_costs': '${:,.2f}',
+                            'total_costs': '${:,.2f}',
+                            'profit': '${:,.2f}',
+                            'margin_pct': '{:.1f}%'
+                        }),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Highlight best performer
+                    best_business = pl_df.iloc[0]
+                    st.success(f"🏆 Most Profitable: **{best_business['business']}** - Profit: ${best_business['profit']:,.2f} ({best_business['margin_pct']:.1f}% margin)")
+                    
+                except Exception as e:
+                    st.error(f"❌ Error calculating P&L: {str(e)}")
+                    st.info("💡 This might happen if there are data inconsistencies. Check your data!")
+    
         
         else:
             st.info("💡 No revenue data found in this file")
             st.divider()
-    
+                # In app.py, dopo il cleaning
+
         
         # Tabs for different views
         tab1, tab2, tab3 = st.tabs(["📋 Data Preview", "📊 Statistics", "🔍 Filters"])
