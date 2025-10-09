@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Tuple, List
 from .revenue_analyzer import extract_business_from_revenue
-
+from core.transaction_categories import categorize_transaction
 
 
 
@@ -85,62 +85,37 @@ def build_employee_mapping(df: pd.DataFrame) -> dict:
 
 
 def extract_direct_costs(df: pd.DataFrame, employee_map: dict) -> pd.DataFrame:
-    """
-    Estrae i costi diretti per ogni business.
-    
-    Args:
-        df: DataFrame pulito
-        employee_map: {'Kathleen Hinds': 'HQ Ray', ...}
-    
-    Returns:
-        DataFrame con:
-        - business: Nome del business
-        - wages: Totale stipendi
-        - marketing: Totale marketing
-        - health_insurance: Totale assicurazioni
-        - hr_training: Totale training
-        - total_direct_costs: Somma di tutto
-    """
-    
-    
     business_costs = {}
     
-    direct_cost_types = ['Wage', 'Replacement Wage', 'Marketing', 'Health Insurance', 'HR Training']
-    
-    direct_df = df[df["type"].isin(direct_cost_types)].copy()
     
     
-    # Loop su ogni transazione
-    
-    for _, row in direct_df.iterrows():
+    # Loop su TUTTO il DataFrame (non più filtrato!)
+    for _, row in df.iterrows():
+        category, business = categorize_transaction(row)
         description = row["description"]
+        
+        
+        if category != "direct_cost":
+            continue  # Salta se non è direct cost
+        
         cost_type = row["type"]
         price = abs(row["price"])
         
+        if business is None:
+            if cost_type in ["Health Insurance", "HR Training"]:
+                if cost_type == "Health Insurance":
+                    # "Silver Health Insurance (James Rodriguez) - 20 Employees,"
+                    employee_name = description.split("(")[1].split(")")[0].strip()
+                else:
+                    employee_name = description.split("training")[0].strip()
+                    
+            business = employee_map.get(employee_name)
         
-        if cost_type in ['Wage', 'Replacement Wage']:
-            # Usa la stessa logica di build_employee_mapping
-            if cost_type == 'Replacement Wage':
-                employee_name = description.split("for")[-1].split("(")[0].strip()  # ✅
-            else:
-                employee_name = description.split("(")[0].strip()  # ✅
-            
-            business_name = employee_map[employee_name]
-            
-        elif cost_type == 'Marketing':
-            business_name = description.split("for")[-1].strip()
-            
-        elif cost_type in ['Health Insurance', 'HR Training']:
-            if cost_type == 'Health Insurance':
-                employee_name = description.split("(")[1].split(")")[0].strip()
-            else:
-                employee_name = description.split("training")[0].strip()
-                
-            business_name = employee_map[employee_name]
-        # Aggiungere feature per salvare il tipo di insurance (gold,silver,bronze)
+        if business is None:
+            continue
     
-        if business_name  not in business_costs:
-            business_costs[business_name] = {
+        if business  not in business_costs:
+            business_costs[business] = {
                 'wages': 0,
                 'marketing':0,
                 'health_insurance':0,
@@ -148,13 +123,13 @@ def extract_direct_costs(df: pd.DataFrame, employee_map: dict) -> pd.DataFrame:
             }
             
         if cost_type in ["Wage", "Replacement Wage"]:
-            business_costs[business_name]['wages'] += price
+            business_costs[business]['wages'] += price
         elif cost_type == 'Marketing':
-            business_costs[business_name]['marketing'] += price
+            business_costs[business]['marketing'] += price
         elif cost_type == 'Health Insurance':
-            business_costs[business_name]["health_insurance"] += price 
+            business_costs[business]["health_insurance"] += price 
         elif cost_type == 'HR Training':
-            business_costs[business_name]["hr_training"] += price 
+            business_costs[business]["hr_training"] += price 
             
             
     costs_df = pd.DataFrame.from_dict(business_costs, orient="index")
@@ -193,25 +168,17 @@ def extract_revenue(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_shared_costs(df: pd.DataFrame) -> Tuple[float, float]:
-    """
-    Calcola i totali dei costi condivisi.
     
-    Returns:
-        Tuple: (total_revenue_based, total_equal_split)
-    """
-    # Costi condivisi revenue-based
-    revenue_based_types = ['Rent', 'Loan Payment', 'Tax Payment', 
-                           'Bank Negative Interest Rate', 'Delivery Contract']
+    total_revenue_based = 0
+    total_equal_split = 0
     
-    # Costi condivisi equal-split
-    equal_split_types = ['Item Purchase', 'Import Delivery', 'Interior Designer']
-    
-    # Filtra DataFrame
-    revenue_based_df = df[df['type'].isin(revenue_based_types)]
-    equal_split_df = df[df['type'].isin(equal_split_types)]
-    
-    # Calcola totali
-    total_revenue_based = abs(revenue_based_df["price"].sum())
-    total_equal_split = abs(equal_split_df["price"].sum())
+    for _, row in df.iterrows():
+        category, _ = categorize_transaction(row)
+        price = abs(row["price"])
+        
+        if category == "shared_revenue_based":
+            total_revenue_based += price
+        elif category == "shared_euqual_split":
+            total_equal_split += price
     
     return total_revenue_based, total_equal_split
