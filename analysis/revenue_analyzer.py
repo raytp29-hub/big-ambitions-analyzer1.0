@@ -7,6 +7,35 @@ import pandas as pd
 from typing import Tuple, List
 
 
+
+
+
+def extract_business_name_from_string(description:str) -> str:
+    """
+    Helper per estrarre business name da descrizione revenue.
+    Rimuove la parola "Revenue" dalla fine della stringa.
+    
+    Args:
+        description: Es. "Tech & Gift Revenue"
+        
+    Returns:
+        Business name, es. "Tech & Gift"
+        
+    Examples:
+        >>> extract_business_name_from_revenue_string("Tech & Gift Revenue")
+        "Tech & Gift"
+        >>> extract_business_name_from_revenue_string("G&J Revenue")
+        "G&J"
+    """
+
+    parti = description.split()
+    if parti[-1] == "Revenue":
+        return " ".join(parti[:-1])
+    return description
+
+
+
+
 def extract_business_from_revenue(df: pd.DataFrame) -> Tuple[List[str], pd.Series, pd.DataFrame]:
     """
     Extract business names and calculate revenue totals.
@@ -24,14 +53,8 @@ def extract_business_from_revenue(df: pd.DataFrame) -> Tuple[List[str], pd.Serie
     # STEP 1: Filtra solo le righe di tipo "Revenue"
     revenue_df = df[df["type"] == "Revenue"].copy()
     
-    # STEP 2: Estrai il nome del business dalla descrizione
-    def rimuovi_revenue(descrizione):
-        parti = descrizione.split()
-        if parti[-1] == "Revenue":
-            return " ".join(parti[:-1])
-        return descrizione
     
-    revenue_df["business"] = revenue_df["description"].apply(rimuovi_revenue)
+    revenue_df["business"] = revenue_df["description"].apply(extract_business_name_from_string)
     
     
     

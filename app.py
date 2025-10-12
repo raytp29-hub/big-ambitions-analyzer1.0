@@ -286,8 +286,8 @@ if uploaded_file is not None:
                 buttons=buttons,
                 direction="down",
                 showactive=True,
-                x=0.17,
-                y=1.15,
+                x=0.5,
+                y=1.2,
                 xanchor="left",
                 yanchor="top"
             )]

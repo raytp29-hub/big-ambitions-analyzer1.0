@@ -4,8 +4,7 @@ Centralized Transaction Category Management
 
 import re
 from typing import Tuple, Optional
-from analysis.revenue_analyzer import extract_business_from_revenue
-
+from analysis.revenue_analyzer import extract_business_name_from_string
 
 
 SHARED_REVENUE_BASED_TYPES = [
@@ -39,7 +38,7 @@ def categorize_transaction(row) -> Tuple[str, Optional[str]]:
     return ("personal", None)
     
             
-from analysis.revenue_analyzer import extract_business_from_revenue
+
 
 def extract_business_from_description(description: str, trans_type: str) -> Optional[str]:
     """
@@ -50,8 +49,7 @@ def extract_business_from_description(description: str, trans_type: str) -> Opti
     
     # Pattern 1: Revenue (riusa funzione esistente)
     if trans_type == 'Revenue':
-        business = description.replace("Revenue", "").strip()
-        return business
+        return extract_business_name_from_string(description)
     
     # Pattern 2: Wage (per HQ Ray, Warehouse, ecc.)
     if trans_type == 'Wage':
