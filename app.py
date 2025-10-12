@@ -8,7 +8,7 @@ import pandas as pd
 from core.data_cleaner import clean_big_ambitions_csv
 from analysis.revenue_analyzer import extract_business_from_revenue
 from analysis.profit_loss import calculate_profit_loss
-
+import plotly.graph_objects as go  
 
 # Page Configuration
 st.set_page_config(
@@ -184,8 +184,138 @@ if uploaded_file is not None:
         else:
             st.info("💡 No revenue data found in this file")
             st.divider()
-                # In app.py, dopo il cleaning
+    
+        st.subheader("TEST")
 
+        fig1 = px.bar(
+            pl_df,
+            x="business",
+            y="profit", 
+            title="Profit by Business",
+            color="profit",
+            color_continuous_scale=["red", "yellow", "green"]   
+            )
+        fig2 = px.bar(
+            pl_df,
+            x="business",
+            y="margin_pct",
+            title="Profit Margin %"
+        )
+        
+        
+        fig3 = px.bar(
+            pl_df,
+            x="business",
+            y=["wages", "shared_revenue_based", "marketing", "health_insurance", "hr_training"],
+            barmode="stack",
+            title="Cost Breakdown",
+            labels={"value": "Amount ($)", "variable": "Category"},
+            color_discrete_map={
+                "wages": "#e7f316",
+                "shared_revenue_based": "#bc2210",
+                "marketing": "#225ae6",
+                "health_insurance": "#0cc05a",
+                "hr_training": "#14bcc2"
+            }
+        )
+        
+        
+        fig3.update_yaxes(tickformat='$,.0f')
+        fig3.update_layout(height=500)
+        
+        
+        
+        
+#######################################################
+        
+        # Creazione grafico a cascata per business
+        
+        fig5 = go.Figure()
+        
+        for i, business_row in pl_df.iterrows():
+            x_list = ["Revenue", "Direct Costs", "Shared Costs", "Profit"]
+            y_list = [
+                business_row["revenue"],
+                -business_row["total_direct_costs"],
+                -business_row["total_shared_costs"],
+                business_row["profit"]
+            ]
+            
+            measure = ["relative", "relative", "relative", "total"]
+            
+            fig5.add_trace(go.Waterfall(
+                x= x_list,
+                y=y_list,
+                measure=measure,
+                text= y_list,
+                textposition="outside",
+                texttemplate='$%{y:,.0f}',
+                visible=(i==0),
+                name=business_row["business"],
+                increasing={"marker": {"color": "#2ecc71"}},    
+                decreasing={"marker": {"color": "#e74c3c"}},      
+                totals={"marker": {"color": "#3498db"}}
+            ))
+        
+        buttons = []
+        
+        for i in range(len(pl_df)):
+            business_name = pl_df.iloc[i]["business"]
+            
+            # Creare array di visibilità [False, False, True, False]
+            # True solo alla posizione i
+            visible = [False] * len(pl_df)
+            visible[i] = True
+            
+            buttons.append(dict(
+                label=business_name,
+                method="update",
+                args=[{"visible": visible},
+                    {"title.text": f"<b>P&L Waterfall - {business_name}</b>"}
+                ]
+            ))
+            
+            
+            
+            
+            
+        fig5.update_layout(
+            title=f"P&L Waterfall - {pl_df.iloc[0]['business']}",
+            height=500,
+            updatemenus=[dict(
+                buttons=buttons,
+                direction="down",
+                showactive=True,
+                x=0.17,
+                y=1.15,
+                xanchor="left",
+                yanchor="top"
+            )]
+        )   
+            
+            
+        
+            
+        
+        col1, col2 = st.columns(2)
+        
+
+        with col1:
+            st.subheader("Profit")
+            
+            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig3, use_container_width=True)
+            
+            
+        with col2:
+            st.subheader("Margin %")
+            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig5, use_container_width=True)
+        
+        
+        
+        
+        
         
         # Tabs for different views
         tab1, tab2, tab3 = st.tabs(["📋 Data Preview", "📊 Statistics", "🔍 Filters"])

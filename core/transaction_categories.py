@@ -23,19 +23,20 @@ def categorize_transaction(row) -> Tuple[str, Optional[str]]:
     
 
     if price > 0:
-        return "revenue", None
+        business = extract_business_from_description(description, trans_type)
+        return ("revenue", business)
     elif price < 0:
         business = extract_business_from_description(description, trans_type)
         
         if business:
-            return "direct_cost", business
+            return ("direct_cost", business)
         else:
-            if trans_type in SHARED_REVENUE_BASED_TYPES:
-                return "shared_revenue_based", None
-            else:
-                return "personal", None
+            if trans_type in ["Health Insurance", "HR Training"]:
+                return ("direct_cost", None)
+            elif trans_type in SHARED_REVENUE_BASED_TYPES:
+                return ("shared_revenue_based", None)
     
-    return "unknown", None
+    return ("personal", None)
     
             
 from analysis.revenue_analyzer import extract_business_from_revenue

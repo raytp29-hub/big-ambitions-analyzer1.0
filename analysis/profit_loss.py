@@ -33,7 +33,13 @@ def calculate_profit_loss(df):
     revenue_per_business["shared_equal_split"] = total_equal_split / num_business
     
     # STEP 6: Merge revenue e direct costs
-    pl_df = pd.merge(revenue_per_business, direct_costs, on='business')
+    pl_df = pd.merge(
+        revenue_per_business,
+        direct_costs,
+        on="business",
+    )
+    
+    pl_df = pl_df.fillna(0)
     
     # Total shared costs
     pl_df["total_shared_costs"] = pl_df["shared_revenue_based"] + pl_df["shared_equal_split"]
@@ -47,7 +53,7 @@ def calculate_profit_loss(df):
     # Margin
     pl_df["margin_pct"] = (pl_df["profit"] / pl_df["revenue"]) * 100
     
-    
+
     
     return pl_df
     
@@ -109,7 +115,7 @@ def extract_direct_costs(df: pd.DataFrame, employee_map: dict) -> pd.DataFrame:
                 else:
                     employee_name = description.split("training")[0].strip()
                     
-            business = employee_map.get(employee_name)
+                business = employee_map.get(employee_name)
         
         if business is None:
             continue
