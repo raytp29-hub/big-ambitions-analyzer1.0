@@ -184,7 +184,7 @@ def calculate_shared_costs(df: pd.DataFrame) -> Tuple[float, float]:
         
         if category == "shared_revenue_based":
             total_revenue_based += price
-        elif category == "shared_euqual_split":
+        elif category == "shared_equal_split":
             total_equal_split += price
     
     return total_revenue_based, total_equal_split

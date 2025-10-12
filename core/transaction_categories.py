@@ -14,6 +14,11 @@ SHARED_REVENUE_BASED_TYPES = [
     'Bank Negative Interest Rate'
 ]
 
+
+SHARED_EQUAL_SPLIT_TYPES = [
+    "Interior Designer"
+]
+
 def categorize_transaction(row) -> Tuple[str, Optional[str]]:
     """Categorizza una transazione."""
     trans_type = row['type']
@@ -34,6 +39,8 @@ def categorize_transaction(row) -> Tuple[str, Optional[str]]:
                 return ("direct_cost", None)
             elif trans_type in SHARED_REVENUE_BASED_TYPES:
                 return ("shared_revenue_based", None)
+            elif trans_type in SHARED_EQUAL_SPLIT_TYPES:
+                return ("shared_equal_split", None)
     
     return ("personal", None)
     
