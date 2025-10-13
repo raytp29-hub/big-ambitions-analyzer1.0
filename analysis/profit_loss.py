@@ -15,6 +15,24 @@ def calculate_profit_loss(df):
     # STEP 2: Estrai revenue per business
     revenue_per_business = extract_revenue(df)
     
+    
+    if revenue_per_business.empty or len(revenue_per_business) == 0:
+        # Nessun revenue in questo periodo, ritorna DataFrame vuoto con struttura corretta
+        return pd.DataFrame(columns=[
+            'business',
+            'revenue',
+            'shared_revenue_based',
+            'shared_equal_split',
+            'wages',
+            'marketing',
+            'health_insurance',
+            'hr_training',
+            'total_direct_costs',
+            'total_shared_costs',
+            'total_costs',
+            'profit',
+            'margin_pct'
+        ])
     # STEP 3: Estrai direct costs per business
     direct_costs = extract_direct_costs(df, employee_map)
     
@@ -137,6 +155,28 @@ def extract_direct_costs(df: pd.DataFrame, employee_map: dict) -> pd.DataFrame:
         elif cost_type == 'HR Training':
             business_costs[business]["hr_training"] += price 
             
+    if not business_costs:
+        return pd.DataFrame(columns=[
+            "business",
+            "wages",
+            "marketing",
+            "health_insurance",
+            "hr_training",
+            "total_direct_costs"
+        ])
+    
+    costs_df = pd.DataFrame.from_dict(business_costs, orient="index")
+    costs_df.reset_index(inplace=True)
+    costs_df.rename(columns={"index":"business"}, inplace=True)
+    
+    costs_df["total_direct_costs"] = (
+        costs_df["wages"] +
+        costs_df["marketing"] +
+        costs_df["health_insurance"] + 
+        costs_df["hr_training"]
+    )
+    
+    
             
     costs_df = pd.DataFrame.from_dict(business_costs, orient="index")
     costs_df.reset_index(inplace=True)
@@ -148,6 +188,11 @@ def extract_direct_costs(df: pd.DataFrame, employee_map: dict) -> pd.DataFrame:
         costs_df["health_insurance"] + 
         costs_df["hr_training"]
     )
+    
+    
+    
+    
+    
     
     return costs_df
         
