@@ -15,7 +15,7 @@ if error:
     exit(1)
 
 print(f"✅ Dati caricati: {len(df)} transazioni\n")
-
+"""
 # Crea analyzer
 analyzer = TemporalAnalyzer(df)
 
@@ -84,3 +84,14 @@ except Exception as e:
 print("\n" + "=" * 60)
 print("✅ Test completati!")
 print("=" * 60)
+
+"""
+
+
+
+from analysis.temporal_analyzer import TemporalAnalyzer
+
+
+analyzer = TemporalAnalyzer(df)
+total_revenue = analyzer.calculate_period_metrics(None,"weekly")
+print(total_revenue)

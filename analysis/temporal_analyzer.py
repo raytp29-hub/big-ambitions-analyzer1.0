@@ -99,7 +99,62 @@ class TemporalAnalyzer:
                 
             return f"{period_name} {period + 1} (Day {start_day}---{end_day})"
         
+   
+   
+   
+   
+   # ==============================================
+   #                ESERCITAZIONE
+   #===============================================
         
         
-
+    def calculate_total_revenue_by_period(self, granularity="weekly"):
+        # Otteniamo il dataFrame aggregato per colonna period
+        aggregated_df = self.aggregate_by_period(granularity)
         
+        total_revenue = aggregated_df.groupby("period")["revenue"].sum()
+        
+        return total_revenue
+    
+    
+    def calculate_average_profit_per_business(self, granularity="weekly"):
+        
+        aggregated_df = self.aggregate_by_period(granularity)
+        
+        
+        # calcolo della media
+        average_profit = aggregated_df.groupby("period")["profit"].mean()
+        
+        return average_profit
+    
+    
+    
+    def calculate_period_metrics(self, business_name=None, granularity= "weekly"):
+        
+        aggregated_df = self.aggregate_by_period(granularity)
+        
+        if business_name is not None:
+            aggregated_df = aggregated_df[aggregated_df["business"] == business_name]
+            
+        metrics = aggregated_df.groupby("period").agg({
+            "revenue":"sum",
+            "total_costs":"sum",
+            "profit":"sum",
+            "margin_pct": "mean",
+            "business": "count"
+        })
+        
+        metrics.columns = [
+            "total_revenue",
+            "total_costs",
+            "total_profit",
+            "avg_margin_pct",
+            "num_business"
+        ]
+        
+        
+        metrics = metrics.reset_index()
+        
+        metrics["period_label"] = metrics["period"].apply(lambda p: self._create_period_label(p, granularity))
+        
+        return metrics
