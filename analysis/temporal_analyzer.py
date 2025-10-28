@@ -1,5 +1,6 @@
 
 import pandas as pd
+import numpy as np
 from analysis.profit_loss import calculate_profit_loss
 
 
@@ -158,3 +159,79 @@ class TemporalAnalyzer:
         metrics["period_label"] = metrics["period"].apply(lambda p: self._create_period_label(p, granularity))
         
         return metrics
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    # ===============================================
+    #           Funzione Comparazione Periodi
+    # ===============================================
+    
+    
+    def compare_periods(self, period1: int, period2: int, granularity="weekly", business_name=None):
+        """
+            Confronta due periodi specifici.
+            
+            Args:
+                period1: Numero primo periodo (es. 0 = Week 1)
+                period2: Numero secondo periodo (es. 1 = Week 2)
+                granularity: Aggregazione temporale
+                business_name: Opzionale, filtra per business specifico
+            
+            Returns:
+                DataFrame con confronto side-by-side
+        """
+        # Step 1: Ottieni metriche per tutti i periodi
+        metrics = self.calculate_period_metrics(business_name, granularity)
+            
+        
+        
+        # Step 2: Verifica che i periodi esistano
+        available_periods = metrics["period"].unique()
+        if period1 not in available_periods:
+            raise ValueError(f"Period {period1} not found")
+        if period2 not in available_periods:
+            raise ValueError(f"Period {period2} not found")
+        
+        
+        # Step 3: Estrai dati Period 1 e Period 2
+        period1_data = metrics[metrics["period"] == period1]
+        period2_data = metrics[metrics["period"] == period2]
+        
+        # Step 4: Seleziona solo colonne numeriche rilevanti
+        numeric_cols = ["total_revenue", "total_costs", "total_profit", "avg_margin_pct", "num_business"]
+        
+        
+        
+        try:
+            p1_values = period1_data[numeric_cols].values[0]
+            p2_values = period2_data[numeric_cols].values[0]
+        except IndexError:
+            raise ValueError(f"Date not found for periods {period1}, {period2}")
+        # Step 5: Calcola Delta
+        delta = p2_values - p1_values
+        
+        # Step 6: Calcola Growth %
+        growth = np.where(
+            p1_values == 0,
+            np.nan,
+            (delta / p1_values) * 100
+        )
+        
+        # Step 7: Costruisci DataFrame risultato
+        comparison_df = pd.DataFrame({
+            "metric": numeric_cols,
+            "period_1": period1_data[numeric_cols].values[0],
+            "period_2": period2_data[numeric_cols].values[0],
+            "delta": delta,
+            "growth_pct": growth
+        }) 
+
+        # Step 8: Formatta e ritorna
+        return comparison_df

@@ -93,5 +93,5 @@ from analysis.temporal_analyzer import TemporalAnalyzer
 
 
 analyzer = TemporalAnalyzer(df)
-total_revenue = analyzer.calculate_period_metrics(None,"weekly")
+total_revenue = analyzer.compare_periods(3,0,"weekly","L&G")
 print(total_revenue)
