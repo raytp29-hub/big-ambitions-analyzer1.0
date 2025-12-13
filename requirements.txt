@@ -2,7 +2,7 @@
 streamlit>=1.28.0
 pandas>=2.0.0
 numpy>=1.24.0
-
+pulp>=2.7.0  # Per ottimizzazione turni
 # Visualization
 plotly>=5.17.0
 

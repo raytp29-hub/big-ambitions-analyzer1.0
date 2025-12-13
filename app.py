@@ -5,6 +5,7 @@ Main Streamlit Application
 
 import streamlit as st
 import pandas as pd
+from analysis.temporal_analyzer import TemporalAnalyzer
 from core.data_cleaner import clean_big_ambitions_csv
 from analysis.revenue_analyzer import extract_business_from_revenue
 from analysis.profit_loss import calculate_profit_loss
@@ -179,7 +180,33 @@ if uploaded_file is not None:
                 except Exception as e:
                     st.error(f"❌ Error calculating P&L: {str(e)}")
                     st.info("💡 This might happen if there are data inconsistencies. Check your data!")
-    
+                
+                
+                
+                
+                
+                st.header("📈 Temporal Analysis")
+                analyzer = TemporalAnalyzer(df)
+                
+                # Selector granularity
+                granularity = st.selectbox("Aggregation",[
+                    "daily","weekly","monthly","auto"
+                ])
+                
+                temporal_df = analyzer.aggregate_by_period(granularity)
+                
+                fig = px.line(
+                    temporal_df,
+                    x="period_label",
+                    y="profit",
+                    color="business",
+                    title="Profit Trend Over Time"
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            
+            
+            
         
         else:
             st.info("💡 No revenue data found in this file")
