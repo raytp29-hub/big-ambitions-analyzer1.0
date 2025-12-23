@@ -15,10 +15,6 @@ import plotly.express as px
 # Import Schedule Optimizer page
 from visualization.schedule_page import render_schedule_optimizer_page
 
-
-
-
-
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
