@@ -279,3 +279,36 @@ def parse_price(price_str: str) -> float:
     if pd.isna(price_str):
         return 0.0
     return float(str(price_str).replace('$', '').replace(',', ''))
+
+
+
+def calculate_workstation_capacity(selected_furniture: List[Dict], business_category: str) -> int:
+    """
+    Calculate max simultaneous employees based on workstations.
+    
+    Args:
+        selected_furniture: List of furniture with quantities
+        business_category: 'Retail' or 'Office'
+    
+    Returns:
+        Max number of employees that can work simultaneously
+    """
+    
+    if business_category == 'Retail':
+        checkout_station = 0
+        
+        for furn in selected_furniture:
+            if furn['name'] in ['Cash Register', 'Checkout Counter']:
+                checkout_station += furn['quantity']
+        return checkout_station if checkout_station > 0 else 1
+    
+    elif business_category == 'Office':
+        workstation = 0
+        
+        for furn in selected_furniture:
+            if 'Office Workstation' in furn['name']:
+                workstation += furn['quantity']
+        return workstation if workstation > 0 else 1
+    
+    else:
+        return 1

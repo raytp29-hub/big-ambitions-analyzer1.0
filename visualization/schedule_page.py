@@ -5,11 +5,16 @@ UI for configuring business setup and employees
 import streamlit as st
 import pandas as pd
 from typing import List, Optional
+from analysis.schedule_optimizer import optimize_schedule
+
+
+
 
 # Import models and constraints
 from analysis.schedule_models import Building, Employee, Demand, DailySchedule, BusinessSetup
 from analysis.schedule_constraints import (
     BUSINESS_TYPES,
+    calculate_workstation_capacity,
     get_available_buildings,
     get_available_categories,
     get_building_capacity,
@@ -107,6 +112,17 @@ def render_business_setup():
 
     # Store selections with quantities
     selected_furniture = []
+    
+    h1, h2, h3, h4 = st.columns([3,1,1,1])
+    
+    with h1:
+        st.markdown("Furniture")
+    with h2:
+        st.markdown("Costumer Capacity")
+    with h3:
+        st.markdown("Quantity")
+    with h4:
+        st.markdown("Total Quantity")
 
     for idx, row in df_furniture.iterrows():
         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
@@ -149,7 +165,7 @@ def render_business_setup():
                 'total_price': parse_price(row['price']) * qty
             })
 
-    # SECTION 5: Capacity Analysis (NEW!)
+    # SECTION 5: Capacity Analysis
     if selected_furniture:
         st.divider()
         st.subheader("📊 Capacity Analysis")
@@ -185,6 +201,37 @@ def render_business_setup():
             service_rate = 10
             employees_needed = effective_capacity / service_rate
             st.metric("Estimated Employees", f"~{employees_needed:.0f}")
+        
+        # ================================================================
+        # SECTION 6: Confirm Button
+        # ================================================================
+        st.divider()
+        
+        if st.button("✓ Confirm Business Setup", type="primary", use_container_width=True):
+            # Create Building object
+            building = Building(
+                business_type=business_category,
+                code=building_code,
+                capacity_limit=effective_capacity
+            )
+            
+            # Calculate max simultaneous employees
+            max_simultaneous = calculate_workstation_capacity(selected_furniture, business_category)
+            
+            # Save to session state
+            st.session_state.business_setup = building
+            st.session_state.selected_business_type = business_type
+            st.session_state.selected_furniture = selected_furniture
+            st.session_state.total_furniture_cost = total_cost
+            st.session_state.effective_capacity = effective_capacity
+            st.session_state.max_simultaneous_employees = max_simultaneous  # ← NUOVO
+            
+            st.success(f"✓ Business setup confirmed: {business_type} in building {building_code}")
+            st.info(f"📊 Max {max_simultaneous} employees can work simultaneously")  # ← NUOVO
+            st.rerun()
+    
+    else:
+        st.info("👆 Select at least one furniture item to proceed")
 
 # ============================================================================
 # STEP 2: EMPLOYEE CONFIGURATION
@@ -534,6 +581,87 @@ def render_operating_hours():
                 st.text(f"  {day}")
 
 
+
+st.divider()
+
+# ============================================================================
+# STEP 5: RENDER OPTIMIZATION
+# ============================================================================
+
+def render_optimization():
+    
+    
+    
+    if not st.session_state.business_setup:
+        st.warning("Complete Step 1")
+        return 
+    
+    if not st.session_state.max_simultaneous_employees:
+        st.warning("Complete Step 1")
+        return
+    
+    if not st.session_state.employees:
+        st.warning("Add at least 1 employee in Step 2")
+        return
+    
+    if not st.session_state.weekly_schedule:
+        st.warning("Configure operating hours in Step 4")
+        return
+
+
+    
+    st.header("🚀 Step 5: Optimization")
+
+    alpha = 1.0
+    beta = 0.5
+    
+    if st.button("🚀 Run Optimization", type="primary"):
+        with st.spinner("Optimizing schedules..."):
+        
+            result = optimize_schedule(
+                business_setup=st.session_state.business_setup,
+                employees=st.session_state.employees,
+                weekly_schedule=st.session_state.weekly_schedule,
+                max_simultaneous=st.session_state.max_simultaneous_employees,
+                alpha=alpha,
+                beta=beta
+            )
+            
+            st.session_state.optimization_result = result
+            st.rerun()
+            
+            
+            
+    if 'optimization_result' in st.session_state:
+        result = st.session_state.optimization_result
+
+
+    
+    
+    
+    
+    
+        schedule_data = {}
+        
+        daily_shifts = result.daily_shifts
+        for emp in st.session_state.employees:
+            schedule_data[emp.name] = []
+            
+            for day in DAYS_OF_WEEK:
+                shifts = result.schedule[emp.name][day]
+                if shifts:
+                    shifts_info = daily_shifts[day][shifts[0]]
+                    schedule_data[emp.name].append(
+                        f"{shifts_info['start']}-{shifts_info['end']}"
+                    )
+                else:
+                    schedule_data[emp.name].append('-')
+                    
+        df = pd.DataFrame(schedule_data, index=DAYS_OF_WEEK)
+        st.dataframe(df)
+    
+    
+        
 # ============================================================================
 # MAIN RENDER FUNCTION
 # ============================================================================
@@ -558,6 +686,8 @@ def render_schedule_optimizer_page():
     st.divider()
     
     render_operating_hours()
+    st.divider()
+    render_optimization()
     
     # Show complete setup summary at bottom
 if ('business_setup' in st.session_state and 
@@ -592,6 +722,7 @@ if ('business_setup' in st.session_state and
     
     for emp_text in employee_summary:
         st.markdown(emp_text)
+    
 
 
 # ============================================================================

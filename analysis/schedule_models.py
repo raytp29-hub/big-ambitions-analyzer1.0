@@ -3,7 +3,7 @@ Schedule Models - Data Classes
 Core data structures for Schedule Optimizer
 """
 from dataclasses import dataclass, field
-from typing import Literal, List
+from typing import Literal, List, Dict
 
 # ============================================================================
 # BUILDING
@@ -129,3 +129,22 @@ class BusinessSetup:
             f"  Employees: {self.total_employees}\n"
             f"  Weekly Hours: {self.total_weekly_hours}h\n"
         )
+        
+        
+
+# ============================================================================
+# OPTIMIZATION RESULT
+# ============================================================================
+
+
+@dataclass
+class OptimizationResult:
+    """Result of schedule optimization"""
+    success: bool
+    status: str
+    total_cost: float
+    total_satisfaction: float
+    schedule: Dict[str, Dict[str, List[str]]]  # employee -> day -> [shifts]
+    daily_shifts: Dict[str, Dict[str, dict]]   # day -> shift_name -> shift_info
+    unmet_demands: List[str]
+    solver_time: float
