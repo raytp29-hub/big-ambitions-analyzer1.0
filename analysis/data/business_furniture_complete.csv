@@ -1,0 +1,89 @@
+business_type,category,furniture_name,customer_capacity,price
+Gym,Retail,Office Workstation,1.0,"$2,500"
+Fast Food Restaurant,Retail,Industrial Grill,20.0,"$1,400"
+Fast Food Restaurant,Retail,Industrial Fryer Machine,30.0,"$4,400"
+Fast Food Restaurant,Retail,Hotdog Grill,30.0,"$2,200"
+Fast Food Restaurant,Retail,Pizza Oven,20.0,"$10,756"
+Fast Food Restaurant,Retail,Salad Bar,20.0,"$4,000"
+Fast Food Restaurant,Retail,Drinks Fridge,15.0,$875
+Fast Food Restaurant,Retail,Ice Cream Counter,30.0,"$2,000"
+Fast Food Restaurant,Retail,Industrial Grill,20.0,"$1,400"
+Fast Food Restaurant,Retail,Cash Register,20.0,$900
+Coffee Shop,Retail,Industrial Coffee Machine,30.0,"$12,500"
+Coffee Shop,Retail,Bakery Showcase,20.0,$895
+Coffee Shop,Retail,Ice Cream Counter,30.0,"$2,000"
+Coffee Shop,Retail,Salad Bar,20.0,"$4,000"
+Coffee Shop,Retail,Drinks Fridge,15.0,$875
+Coffee Shop,Retail,Cash Register,20.0,$900
+Fruit and Vegetable Store,Retail,Salad Bar,20.0,"$4,000"
+Fruit and Vegetable,Retail,Cash Register,20.0,$900
+Supermarket,Retail,Industrial Fridge,20.0,"$10,830"
+Supermarket,Retail,Industrial Freezer (Small),15.0,"$13,100"
+Supermarket,Retail,Industrial Freezer (Small),15.0,"$13,100"
+Supermarket,Retail,Drinks Fridge,15.0,$875
+Supermarket,Retail,Bakery Showcase,20.0,$895
+Supermarket,Retail,Cash Register,20.0,$900
+Supermarket,Retail,Checkout Counter,30.0,$2300
+Florist,Retail,Rounded Shelf,15.0,"$1,200"
+Florist,Retail,Rounded Shelf,15.0,"$1,200"
+Florist,Retail,Rounded Shelf,15.0,"$1,200"
+Florist,Retail,Rounded Shelf,15.0,"$1,200"
+Florist,Retail,Drinks Fridge,15.0,$875
+Florist,Retail,Cash Register,20.0,$900
+Hairdresser,Retail,Hairdresser Chair,5.0,"$1,250"
+Hairdresser,Retail,Hairdresser Head Wash,10.0,"$2,400"
+Hairdresser,Retail,Hairdresser Shelf,20.0,$600
+Hairdresser,Retail,Cash Register,20.0,$900
+Gift Shop,Retail,Rounded Shelf,15.0,"$1,200"
+Gift Shop,Retail,Rounded Shelf,15.0,"$1,200"
+Gift Shop,Retail,Product Panel,10.0,$500
+Gift Shop,Retail,Display Table (Product),10.0,"$3,250"
+Gift Shop,Retail,Rounded Shelf,15.0,"$1,200"
+Gift Shop,Retail,Rounded Shelf,15.0,"$1,200"
+Gift Shop,Retail,Bookshelf (Small),20.0,$350
+Gift Shop,Retail,Display Table (Product),10.0,"$3,250"
+Gift Shop,Retail,Drinks Fridge,20.0,$875
+Gift Shop,Retail,Display Table (Product),10.0,"$3,250"
+Gift Shop,Retail,Cash Register,20.0,$900
+Gift Shop,Retail,Checkout Counter,30.0,$2300
+Book Store,Retail,Bookshelf (Large),50.0,$780
+Book Store,Retail,Rounded Shelf,15.0,"$1,200"
+Book Store,Retail,Rounded Shelf,15.0,"$1,200"
+Book Store,Retail,Display Table (Product),10.0,"$3,250"
+Book Store,Retail,Cash Register,20.0,$900
+Liquor Store,Retail,Drinks Shelf,10.0,$850
+Liquor Store,Retail,Drinks Shelf,10.0,$850
+Liquor Store,Retail,Drinks Shelf,10.0,$850
+Liquor Store,Retail,Drinks Shelf,10.0,$850
+Liquor Store,Retail,Drinks Fridge,15.0,$875
+Liquor Store,Retail,Cash Register,20.0,$900
+Nightclub,Retail,Cocktail Bar (Beer Shelf),50.0,"$1,000"
+Nightclub,Retail,Cocktail Bar (Drinks Counter),50.0,$800
+Nightclub,Retail,Coat Check,50.0,"$3,000"
+Nightclub,Retail,Drinks Fridge,15.0,$875
+Nightclub,Retail,Cash Register,20.0,$900
+Jewelry Store,Retail,Jewelry Floor Showcase,15.0,"$8,900"
+Jewelry Store,Retail,Jewelry Floor Showcase,15.0,"$8,900"
+Jewelry Store,Retail,Display Table (Product),10.0,"$3,250"
+Jewelry Store,Retail,Display Table (Product),10.0,"$3,250"
+Jewelry Store,Retail,Cash Register,20.0,$900
+Jewelry Store,Retail,Checkout Counter,30.0,$2300
+Electronics Store,Retail,Display Table (Product),10.0,"$3,250"
+Electronics Store,Retail,Display Table (Product),10.0,"$3,250"
+Electronics Store,Retail,Display Table (Product),10.0,"$3,250"
+Electronics Store,Retail,Display Table (Product),10.0,"$3,250"
+Electronics Store,Retail,Display Table (Product),10.0,"$3,250"
+Electronics Store,Retail,Display Table (Product),10.0,"$3,250"
+Electronics Store,Retail,Drinks Fridge,15.0,$875
+Electronics Store,Retail,Cash Register,20.0,$900
+Electronics Store,Retail,Checkout Counter,30.0,$2300
+Clothing Store,Retail,Clothing Rack,10.0,$490
+Clothing Store,Retail,Clothing Rack,10.0,$490
+Clothing Store,Retail,Jewelry Floor Showcase,15.0,"$8,900"
+Clothing Store,Retail,Jewelry Floor Showcase,15.0,"$8,900"
+Clothing Store,Retail,Cash Register,20.0,$900
+Clothing Store,Retail,Checkout Counter,30.0,$2300
+Graphic Designer,Office,Office Workstation,1.0,"$2,500"
+Headquarters,Office,Office Workstation,1.0,"$2,500"
+Law Firm,Office,Office Workstation,1.0,"$2,500"
+Web Development Agency,Office,Office Workstation,1.0,"$2,500"

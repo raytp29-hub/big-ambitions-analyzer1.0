@@ -39,10 +39,10 @@ ENV/
 .streamlit/config.toml
 
 # Data files
-*.csv
-*.xlsx
-*.xlsm
-!sample_data/*.csv
+#*.csv
+#*.xlsx
+#*.xlsm
+#!sample_data/*.csv
 
 # Testing
 .pytest_cache/
