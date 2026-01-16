@@ -35,8 +35,8 @@ from analysis.schedule_constraints import (
 # SESSION STATE INITIALIZATION
 # ============================================================================
 
-def init_session_state():
-    """Initialize session state variables"""
+"""def init_session_state():
+    #Initialize session state variables
     if 'business_setup' not in st.session_state:
         st.session_state.business_setup = None
     
@@ -51,7 +51,7 @@ def init_session_state():
     
     # ← AGGIUNGI QUESTA RIGA
     if 'temp_demands' not in st.session_state:
-        st.session_state.temp_demands = []
+        st.session_state.temp_demands = []"""
 
 # ============================================================================
 # STEP 1: BUSINESS SETUP
@@ -668,7 +668,7 @@ def render_optimization():
 
 def render_schedule_optimizer_page():
     """Main render function for Schedule Optimizer page"""
-    init_session_state()
+    
     
     st.title("🗓️ Schedule Optimizer")
     st.markdown("Configure your business and employees for optimal scheduling")

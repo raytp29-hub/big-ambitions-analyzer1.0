@@ -15,9 +15,11 @@ import plotly.express as px
 # Import Schedule Optimizer page
 from visualization.schedule_page import render_schedule_optimizer_page
 
+from core.session_state_manager import init_global_session_state
 
 
 
+init_global_session_state()
 
 # ============================================================================
 # PAGE CONFIGURATION
