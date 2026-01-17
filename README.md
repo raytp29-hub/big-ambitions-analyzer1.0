@@ -199,11 +199,6 @@ MIT License - feel free to use this for your own projects!
 
 ---
 
-## 📫 Connect
-
-- **GitHub:** [raytp29-hub](https://github.com/raytp29-hub)
 
 
----
 
-**⭐ If you find this useful, consider starring the repo!**
