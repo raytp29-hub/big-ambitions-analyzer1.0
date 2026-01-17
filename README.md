@@ -81,7 +81,7 @@ streamlit run app.py
 
 ### Upload Files
 ![Upload Files](screeshots/1.png)
-*Main interface with transaction upload and navigation*
+
 
 ### Overview
 ![Overview](screeshots/2.png)
