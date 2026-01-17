@@ -1,12 +1,12 @@
 # Big Ambitions Business Analyzer 📊
 
-A free web application for analyzing business performance and optimizing employee schedules in [Big Ambitions](link-al-gioco).
+A free web application for analyzing business performance and optimizing employee schedules in [Big Ambitions](https://store.steampowered.com/app/1331550/Big_Ambitions/).
 
-[![Live Demo](https://img.shields.io/badge/demo-live-success)]([your-url](https://big-ambitions-analyzer1-0.onrender.com/))
+[![Live Demo](https://img.shields.io/badge/demo-live-success)](https://big-ambitions-analyzer1-0.onrender.com/)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/streamlit-1.31+-red.svg)](https://streamlit.io/)
 
-**[🚀 Try it Live](your-url)** | **[📸 Screenshots](#screenshots)** | **[🎯 Features](#features)**
+**[🚀 Try it Live](https://big-ambitions-analyzer1-0.onrender.com/)** | **[📸 Screenshots](#screenshots)** | **[🎯 Features](#features)**
 
 ---
 
@@ -80,51 +80,51 @@ streamlit run app.py
 ## 📸 Screenshots
 
 ### Upload Files
-![Upload Files](/big-ambition-analyzer/analysis/data/screeshots/1.png)
+![Upload Files](screeshots/1.png)
 *Main interface with transaction upload and navigation*
 
 ### Overview
-![Overview](/big-ambition-analyzer/analysis/data/screeshots/2.png)
+![Overview](screeshots/2.png)
 *Main interface with transaction upload and navigation*
 
 ### P&L Analysis
-![P&L Analysis](/big-ambition-analyzer/analysis/data/screeshots/3.png)
+![P&L Analysis](screeshots/3.png)
 *Detailed profit and loss breakdown by category*
 
 ### Business Setup
-![Business Setup](big-ambition-analyzer/analysis/data/screeshots/10.png)
+![Business Setup](screeshots/10.png)
 *Business Setup*
 
 ### Business Category
-![Business Category](big-ambition-analyzer/analysis/data/screeshots/11.png)
+![Business Category](screeshots/11.png)
 *Business Category*
 
 ### Building Size
-![Building Size](big-ambition-analyzer/analysis/data/screeshots/12.png)
+![Building Size](screeshots/12.png)
 *Choose size of building*
 
 ### Furniture Selection
-![Furniture Selection](big-ambition-analyzer/analysis/data/screeshots/13.png)
+![Furniture Selection](screeshots/13.png)
 *Furniture selection*
 
 ### Capacity Analysis
-![Capacity Analysis](big-ambition-analyzer/analysis/data/screeshots/14.png)
+![Capacity Analysis](screeshots/14.png)
 *Analize your costumer capacity according to your furniture*
 
 ### Employee Details
-![Employee Details](big-ambition-analyzer/analysis/data/screeshots/16.png)
+![Employee Details](screeshots/16.png)
 *Setup your Employees*
 
 ### Employees Demands
-![Employees Demands](big-ambition-analyzer/analysis/data/screeshots/17.png)
+![Employees Demands](screeshots/17.png)
 *Select demands of employee*
 
 ### Operating Hours
-![Operating Hours](big-ambition-analyzer/analysis/data/screeshots/21.png)
+![Operating Hours](screeshots/21.png)
 *Setup your operating business hours*
 
 ### Optimization
-![Schedule Optimizer](big-ambition-analyzer/analysis/data/screeshots/25.png)
+![Schedule Optimizer](screeshots/25.png)
 *Final schedule result*
 
 
