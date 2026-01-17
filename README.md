@@ -80,51 +80,51 @@ streamlit run app.py
 ## 📸 Screenshots
 
 ### Upload Files
-![Upload Files](screeshots/1.png)
-
+![Upload Files](screenshots/1.png)
+*Main interface with transaction upload and navigation*
 
 ### Overview
-![Overview](screeshots/2.png)
+![Overview](screenshots/2.png)
 *Main interface with transaction upload and navigation*
 
 ### P&L Analysis
-![P&L Analysis](screeshots/3.png)
+![P&L Analysis](screenshots/3.png)
 *Detailed profit and loss breakdown by category*
 
 ### Business Setup
-![Business Setup](screeshots/10.png)
+![Business Setup](screenshots/10.png)
 *Business Setup*
 
 ### Business Category
-![Business Category](screeshots/11.png)
+![Business Category](screenshots/11.png)
 *Business Category*
 
 ### Building Size
-![Building Size](screeshots/12.png)
+![Building Size](screenshots/12.png)
 *Choose size of building*
 
 ### Furniture Selection
-![Furniture Selection](screeshots/13.png)
+![Furniture Selection](screenshots/13.png)
 *Furniture selection*
 
 ### Capacity Analysis
-![Capacity Analysis](screeshots/14.png)
+![Capacity Analysis](screenshots/14.png)
 *Analize your costumer capacity according to your furniture*
 
 ### Employee Details
-![Employee Details](screeshots/16.png)
+![Employee Details](screenshots/16.png)
 *Setup your Employees*
 
 ### Employees Demands
-![Employees Demands](screeshots/17.png)
+![Employees Demands](screenshots/17.png)
 *Select demands of employee*
 
 ### Operating Hours
-![Operating Hours](screeshots/21.png)
+![Operating Hours](screenshots/21.png)
 *Setup your operating business hours*
 
 ### Optimization
-![Schedule Optimizer](screeshots/25.png)
+![Schedule Optimizer](screenshots/25.png)
 *Final schedule result*
 
 
