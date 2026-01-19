@@ -191,13 +191,6 @@ MIT License - feel free to use this for your own projects!
 
 ---
 
-## 🙏 Acknowledgments
-
-- Big Ambitions community for testing and feedback
-- Game creator for the positive response and encouragement
-- Built as a portfolio project during transition to Data Analytics
-
----
 
 
 
