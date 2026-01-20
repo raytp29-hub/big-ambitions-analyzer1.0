@@ -487,6 +487,7 @@ def optimize_schedule(
             total_cost=0.0,
             total_satisfaction=0.0,
             schedule={},
+            daily_shifts=daily_shifts,  
             unmet_demands=[],
             solver_time=solver_time
         )

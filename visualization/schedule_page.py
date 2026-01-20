@@ -589,9 +589,6 @@ st.divider()
 # ============================================================================
 
 def render_optimization():
-    
-    
-    
     if not st.session_state.business_setup:
         st.warning("Complete Step 1")
         return 
@@ -608,57 +605,129 @@ def render_optimization():
         st.warning("Configure operating hours in Step 4")
         return
 
-
-    
     st.header("🚀 Step 5: Optimization")
 
     alpha = 1.0
     beta = 0.5
-    
+
     if st.button("🚀 Run Optimization", type="primary"):
-        with st.spinner("Optimizing schedules..."):
+        # Previeni doppia esecuzione
+        if st.session_state.get('is_optimizing', False):
+            st.warning("⏳ Optimization already in progress...")
+            st.stop()
         
-            result = optimize_schedule(
-                business_setup=st.session_state.business_setup,
-                employees=st.session_state.employees,
-                weekly_schedule=st.session_state.weekly_schedule,
-                max_simultaneous=st.session_state.max_simultaneous_employees,
-                alpha=alpha,
-                beta=beta
-            )
+        # Verifica nomi dipendenti unici
+        employee_names = [emp.name for emp in st.session_state.employees]
+        if len(employee_names) != len(set(employee_names)):
+            st.error("❌ Error: Employee names must be unique! Found duplicates.")
+            st.stop()
+        
+        with st.spinner("Optimizing schedules..."):
+            try:
+                result = optimize_schedule(
+                    business_setup=st.session_state.business_setup,
+                    employees=st.session_state.employees,
+                    weekly_schedule=st.session_state.weekly_schedule,
+                    max_simultaneous=st.session_state.max_simultaneous_employees,
+                    alpha=alpha,
+                    beta=beta
+                )
+                st.session_state.optimization_result = result
+            except Exception as e:
+                st.error(f"❌ Optimization error: {type(e).__name__}")
+                st.error(f"Details: {str(e)}")
+                st.info("This might be due to:")
+                st.code("""
+    - Duplicate employee names
+    - Invalid constraint configuration
+    - PuLP solver issue
+                """)
+                # Salva un risultato di errore
+                st.session_state.optimization_result = None
+        
+        
+        
+        # Pulisci vecchi risultati
+        if 'optimization_result' in st.session_state:
+            del st.session_state.optimization_result
+        
+        # Imposta flag
+        st.session_state.is_optimizing = True
+        
+        with st.spinner("Optimizing schedules..."):
+            try:
+                result = optimize_schedule(
+                    business_setup=st.session_state.business_setup,
+                    employees=st.session_state.employees,
+                    weekly_schedule=st.session_state.weekly_schedule,
+                    max_simultaneous=st.session_state.max_simultaneous_employees,
+                    alpha=alpha,
+                    beta=beta
+                )
+                st.session_state.optimization_result = result
+            finally:
+                # Assicurati che il flag venga sempre resettato
+                st.session_state.is_optimizing = False
+        
+
             
-            st.session_state.optimization_result = result
-            st.rerun()
             
-            
-            
+
+    # Mostra risultati solo se esistono
     if 'optimization_result' in st.session_state:
         result = st.session_state.optimization_result
-
-
-    
-    
-    
-    
-    
-        schedule_data = {}
         
-        daily_shifts = result.daily_shifts
-        for emp in st.session_state.employees:
-            schedule_data[emp.name] = []
+        # ✅ PRIMA controlla se result è None
+        if result is None:
+            st.warning("⚠️ Previous optimization encountered an error. Please try again.")
+        elif not result.success:  # <-- Cambia da "if" a "elif"
+            st.error(f"❌ Optimization failed: {result.status}")
+            st.warning("""
+            **Possible causes:**
+            - Employee constraints are too restrictive
+            - Not enough employees to cover all shifts
+            - Conflicting demands (e.g., free weekends + full-time may be impossible)
             
-            for day in DAYS_OF_WEEK:
-                shifts = result.schedule[emp.name][day]
-                if shifts:
-                    shifts_info = daily_shifts[day][shifts[0]]
-                    schedule_data[emp.name].append(
-                        f"{shifts_info['start']}-{shifts_info['end']}"
-                    )
-                else:
-                    schedule_data[emp.name].append('-')
-                    
-        df = pd.DataFrame(schedule_data, index=DAYS_OF_WEEK)
-        st.dataframe(df)
+            **Suggestions:**
+            - Add more employees
+            - Reduce critical demands to 'important' priority
+            - Adjust operating hours
+            - Increase max simultaneous employees per shift
+            """)
+            
+            st.info(f"Solver attempted solution for {result.solver_time:.2f}s")
+        else:  # <-- success=True
+            st.success(f"✅ Optimization successful! (solved in {result.solver_time:.2f}s)")
+            
+            # Metriche
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total Weekly Cost", f"${result.total_cost:.2f}")
+            with col2:
+                st.metric("Employee Satisfaction", f"{result.total_satisfaction:.1f}%")
+            
+            # Schedule table
+            st.subheader("📅 Optimized Weekly Schedule")
+            
+           
+            schedule_data = {}
+            daily_shifts = result.daily_shifts
+            
+            for emp in st.session_state.employees:
+                schedule_data[emp.name] = []
+                
+                for day in DAYS_OF_WEEK:
+                    shifts = result.schedule[emp.name][day]
+                    if shifts:
+                        shifts_info = daily_shifts[day][shifts[0]]
+                        schedule_data[emp.name].append(
+                            f"{shifts_info['start']}-{shifts_info['end']}"
+                        )
+                    else:
+                        schedule_data[emp.name].append('-')
+            
+            df = pd.DataFrame(schedule_data, index=DAYS_OF_WEEK)
+            st.dataframe(df, use_container_width=True)
     
     
         
