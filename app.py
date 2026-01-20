@@ -374,6 +374,180 @@ else:
             
             st.divider()
             
+
+
+
+            # === WAGE COST ANALYSIS ===
+            st.subheader("💼 Wage Cost Analysis")
+
+            # Controlli in 2 colonne
+            col1, col2 = st.columns(2)
+
+            with col1:
+                wage_granularity = st.selectbox(
+                    "Time Period",
+                    ["daily", "weekly", "monthly"],
+                    index=1,  # Default to weekly
+                    key="wage_granularity"
+                )
+
+            with col2:
+                # Estrai lista business dai dati
+                business_list = sorted(df[df['type'] == 'Revenue']['description'].apply(
+                    lambda x: x.replace(' Revenue', '').strip()
+                ).unique())
+                
+                # Aggiungi opzione "All"
+                business_options = ["All Businesses"] + business_list
+                
+                selected_business = st.selectbox(
+                    "Business",
+                    options=business_options,
+                    key="wage_business_filter"
+                )
+
+            # Usa TemporalAnalyzer per aggregare
+            wage_temporal_df = analyzer.aggregate_by_period(wage_granularity)
+
+            # Filtra per business se selezionato
+            if selected_business != "All Businesses":
+                wage_temporal_df = wage_temporal_df[wage_temporal_df['business'] == selected_business]
+
+            # Aggrega wages per periodo
+            wage_by_period = wage_temporal_df.groupby('period_label').agg({
+                'wages': 'sum',
+                'period': 'first'
+            }).reset_index()
+
+            # Ordina per periodo
+            wage_by_period = wage_by_period.sort_values('period')
+
+            # === METRICHE CHIAVE ===
+            if len(wage_by_period) > 0:
+                col1, col2, col3 = st.columns(3)
+                
+                total_wages = wage_by_period['wages'].sum()
+                avg_wages = wage_by_period['wages'].mean()
+                last_period_wages = wage_by_period['wages'].iloc[-1]
+                
+                with col1:
+                    st.metric("Total Wage Costs", f"${total_wages:,.2f}")
+                
+                with col2:
+                    st.metric(f"Average {wage_granularity.title()}", f"${avg_wages:,.2f}")
+                
+                with col3:
+                    # Calcola variazione rispetto al periodo precedente
+                    if len(wage_by_period) >= 2:
+                        prev_wages = wage_by_period['wages'].iloc[-2]
+                        delta_wages = last_period_wages - prev_wages
+                        delta_pct = (delta_wages / prev_wages * 100) if prev_wages > 0 else 0
+                        st.metric(
+                            "Last Period", 
+                            f"${last_period_wages:,.2f}",
+                            delta=f"{delta_pct:+.1f}%",
+                            delta_color="inverse"
+                        )
+                    else:
+                        st.metric("Last Period", f"${last_period_wages:,.2f}")
+                
+                # === GRAFICO TREND ===
+                fig_wages = px.line(
+                    wage_by_period,
+                    x='period_label',
+                    y='wages',
+                    title=f"Wage Costs Over Time - {selected_business} ({wage_granularity.title()})",
+                    markers=True
+                )
+                
+                fig_wages.update_layout(
+                    xaxis_title="Period",
+                    yaxis_title="Wage Cost ($)",
+                    height=400
+                )
+                
+                fig_wages.update_traces(
+                    line_color='#e74c3c',
+                    line_width=3,
+                    marker=dict(size=8)
+                )
+                
+                st.plotly_chart(fig_wages, use_container_width=True)
+                
+                # === BREAKDOWN PER BUSINESS (solo se "All Businesses") ===
+                if selected_business == "All Businesses":
+                    with st.expander("📊 Wage Breakdown by Business"):
+                        wage_by_business = wage_temporal_df.groupby(['period_label', 'business']).agg({
+                            'wages': 'sum',
+                            'period': 'first'
+                        }).reset_index()
+                        
+                        wage_by_business = wage_by_business.sort_values('period')
+                        
+                        fig_wages_business = px.bar(
+                            wage_by_business,
+                            x='period_label',
+                            y='wages',
+                            color='business',
+                            title=f"Wage Costs by Business ({wage_granularity.title()})",
+                            barmode='stack'
+                        )
+                        
+                        fig_wages_business.update_layout(
+                            xaxis_title="Period",
+                            yaxis_title="Wage Cost ($)",
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig_wages_business, use_container_width=True)
+                        
+                        # Tabella dettagliata
+                        st.markdown("**Detailed Breakdown:**")
+                        pivot_wages = wage_by_business.pivot(
+                            index='business',
+                            columns='period_label',
+                            values='wages'
+                        ).fillna(0)
+                        
+                        # Aggiungi totale per riga
+                        pivot_wages['Total'] = pivot_wages.sum(axis=1)
+                        
+                        # Ordina per totale decrescente
+                        pivot_wages = pivot_wages.sort_values('Total', ascending=False)
+                        
+                        st.dataframe(
+                            pivot_wages.style.format('${:,.2f}'),
+                            use_container_width=True
+                        )
+                else:
+                    # Mostra dettagli per singolo business
+                    with st.expander(f"📋 Detailed Period Breakdown for {selected_business}"):
+                        # Tabella con tutti i periodi
+                        st.dataframe(
+                            wage_by_period[['period_label', 'wages']].style.format({
+                                'wages': '${:,.2f}'
+                            }),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Statistiche aggiuntive
+                        st.markdown("**Statistics:**")
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Min Period", f"${wage_by_period['wages'].min():,.2f}")
+                        with col2:
+                            st.metric("Max Period", f"${wage_by_period['wages'].max():,.2f}")
+                        with col3:
+                            std_wages = wage_by_period['wages'].std()
+                            st.metric("Std Deviation", f"${std_wages:,.2f}")
+
+            else:
+                st.info(f"No wage data found for {selected_business}")
+
+            st.divider()
+                        
             # === TABS SECTION ===
             tab1, tab2, tab3 = st.tabs(["📋 Data Preview", "📊 Statistics", "🔍 Filters"])
             
