@@ -15,9 +15,23 @@ def calculate_profit_loss(df):
     # STEP 2: Estrai revenue per business
     revenue_per_business = extract_revenue(df)
     
+    # STEP 3: Estrai direct costs per business
+    direct_costs = extract_direct_costs(df, employee_map)
     
-    if revenue_per_business.empty or len(revenue_per_business) == 0:
-        # Nessun revenue in questo periodo, ritorna DataFrame vuoto con struttura corretta
+    # === FIX: CREA LISTA COMPLETA DI BUSINESS ===
+    # Include business con revenue E business con solo costi
+    all_businesses = set()
+    
+    # Aggiungi business da revenue
+    if not revenue_per_business.empty:
+        all_businesses.update(revenue_per_business['business'].tolist())
+    
+    # Aggiungi business da direct costs
+    if not direct_costs.empty:
+        all_businesses.update(direct_costs['business'].tolist())
+    
+    # Se non ci sono business, ritorna DataFrame vuoto
+    if len(all_businesses) == 0:
         return pd.DataFrame(columns=[
             'business',
             'revenue',
@@ -33,47 +47,77 @@ def calculate_profit_loss(df):
             'profit',
             'margin_pct'
         ])
-    # STEP 3: Estrai direct costs per business
-    direct_costs = extract_direct_costs(df, employee_map)
     
-    # STEP 4-5: Alloca shared costs e calcola P&L
+    # Crea DataFrame base con tutti i business
+    base_df = pd.DataFrame({'business': sorted(list(all_businesses))})
+    
+    # STEP 4: Merge con revenue (left join, fillna 0)
+    if not revenue_per_business.empty:
+        base_df = pd.merge(
+            base_df,
+            revenue_per_business,
+            on='business',
+            how='left'
+        )
+    else:
+        base_df['revenue'] = 0.0
+    
+    # Fill NaN revenue con 0
+    base_df['revenue'] = base_df['revenue'].fillna(0.0)
+    
+    # STEP 5: Merge con direct costs (left join, fillna 0)
+    if not direct_costs.empty:
+        base_df = pd.merge(
+            base_df,
+            direct_costs,
+            on='business',
+            how='left'
+        )
+    else:
+        base_df['wages'] = 0.0
+        base_df['marketing'] = 0.0
+        base_df['health_insurance'] = 0.0
+        base_df['hr_training'] = 0.0
+        base_df['total_direct_costs'] = 0.0
+    
+    # Fill NaN costs con 0
+    base_df['wages'] = base_df['wages'].fillna(0.0)
+    base_df['marketing'] = base_df['marketing'].fillna(0.0)
+    base_df['health_insurance'] = base_df['health_insurance'].fillna(0.0)
+    base_df['hr_training'] = base_df['hr_training'].fillna(0.0)
+    base_df['total_direct_costs'] = base_df['total_direct_costs'].fillna(0.0)
+    
+    # STEP 6-7: Alloca shared costs
     total_revenue_based, total_equal_split = calculate_shared_costs(df)
     
-    total_revenue = revenue_per_business["revenue"].sum()
+    total_revenue = base_df["revenue"].sum()
     
-    # allocazione revenue-based
-    revenue_per_business["shared_revenue_based"] = revenue_per_business["revenue"].apply(
-        lambda rev: total_revenue_based * (rev/total_revenue)
-    )
+    # Allocazione revenue-based (proporzionale al revenue)
+    if total_revenue > 0:
+        base_df["shared_revenue_based"] = base_df["revenue"].apply(
+            lambda rev: total_revenue_based * (rev / total_revenue) if total_revenue > 0 else 0
+        )
+    else:
+        # Se nessun revenue, split equo tra tutti i business
+        num_business = len(base_df)
+        base_df["shared_revenue_based"] = total_revenue_based / num_business if num_business > 0 else 0.0
     
     # Equal split
-    num_business = len(revenue_per_business)
-    revenue_per_business["shared_equal_split"] = total_equal_split / num_business
+    num_business = len(base_df)
+    base_df["shared_equal_split"] = total_equal_split / num_business if num_business > 0 else 0.0
     
-    # STEP 6: Merge revenue e direct costs
-    pl_df = pd.merge(
-        revenue_per_business,
-        direct_costs,
-        on="business",
+    # STEP 8: Calcola totali
+    base_df["total_shared_costs"] = base_df["shared_revenue_based"] + base_df["shared_equal_split"]
+    base_df["total_costs"] = base_df["total_direct_costs"] + base_df["total_shared_costs"]
+    base_df["profit"] = base_df["revenue"] - base_df["total_costs"]
+    
+    # Margin (gestisci divisione per zero)
+    base_df["margin_pct"] = base_df.apply(
+        lambda row: (row["profit"] / row["revenue"] * 100) if row["revenue"] > 0 else 0.0,
+        axis=1
     )
     
-    pl_df = pl_df.fillna(0)
-    
-    # Total shared costs
-    pl_df["total_shared_costs"] = pl_df["shared_revenue_based"] + pl_df["shared_equal_split"]
-    
-    # Total Costs
-    pl_df["total_costs"] = pl_df["total_direct_costs"] + pl_df["total_shared_costs"]
-    
-    # Total profit
-    pl_df["profit"] = pl_df["revenue"] - pl_df["total_costs"]
-    
-    # Margin
-    pl_df["margin_pct"] = (pl_df["profit"] / pl_df["revenue"]) * 100
-    
-
-    
-    return pl_df
+    return base_df
     
     
     
@@ -175,25 +219,7 @@ def extract_direct_costs(df: pd.DataFrame, employee_map: dict) -> pd.DataFrame:
         costs_df["health_insurance"] + 
         costs_df["hr_training"]
     )
-    
-    
-            
-    costs_df = pd.DataFrame.from_dict(business_costs, orient="index")
-    costs_df.reset_index(inplace=True)
-    costs_df.rename(columns={"index":"business"}, inplace=True)
-    
-    costs_df["total_direct_costs"] = (
-        costs_df["wages"] + 
-        costs_df["marketing"] + 
-        costs_df["health_insurance"] + 
-        costs_df["hr_training"]
-    )
-    
-    
-    
-    
-    
-    
+
     return costs_df
         
 

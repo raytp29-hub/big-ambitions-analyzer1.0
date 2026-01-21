@@ -410,7 +410,7 @@ else:
 
             # Usa TemporalAnalyzer per aggregare
             wage_temporal_df = analyzer.aggregate_by_period(wage_granularity)
-
+            
             # Filtra per business se selezionato
             if selected_business != "All Businesses":
                 wage_temporal_df = wage_temporal_df[wage_temporal_df['business'] == selected_business]
