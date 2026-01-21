@@ -115,6 +115,8 @@ else:
         else:
             st.success(f"✅ Successfully processed {len(df):,} transactions!")
             
+            analyzer = TemporalAnalyzer(df)
+            
             # Main Metrics
             st.subheader("📊 Overview")
             col1, col2, col3, col4 = st.columns(4)
@@ -241,7 +243,7 @@ else:
                     
                     # === TEMPORAL ANALYSIS ===
                     st.header("📈 Temporal Analysis")
-                    analyzer = TemporalAnalyzer(df)
+                    
                     
                     # Selector granularity
                     granularity = st.selectbox("Aggregation", [
