@@ -254,10 +254,17 @@ else:
                     
                     fig = px.line(
                         temporal_df,
-                        x="period_label",
+                        x="period",
                         y="profit",
                         color="business",
                         title="Profit Trend Over Time"
+                    )
+                    
+                    labels_dict = temporal_df.groupby('period')['period_label'].first().to_dict()
+                    
+                    fig.update_xaxes(
+                        tickvals = list(labels_dict.keys()),
+                        ticktext = list(labels_dict.values())
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
