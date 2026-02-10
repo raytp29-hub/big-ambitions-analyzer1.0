@@ -49,6 +49,9 @@ def detect_csv_format(content: str) -> str:
         return 'single_column'
 
 
+import streamlit as st
+
+@st.cache_data(show_spinner=False)
 def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """
     Clean Big Ambitions CSV with automatic format detection.

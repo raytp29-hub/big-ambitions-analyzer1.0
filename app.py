@@ -48,6 +48,42 @@ with st.sidebar:
         help="Choose which tool to use"
     )
     
+
+
+    st.markdown("### 📂 Data Source")
+        
+        # Check if data exists in session state
+    if "df" not in st.session_state:
+            st.session_state.df = None
+            
+        # Sidebar Uploader (Global)
+    uploaded_file = st.file_uploader(
+            "Upload CSV/XLSM",
+            type=['csv', 'xlsm'],
+            help="Upload once, use everywhere!",
+            key="main_uploader"
+        )
+        
+    if uploaded_file is not None:
+            # Only reload if it's a new file or we don't have data yet
+            # (Streamlit re-runs script on interaction, so we need to be careful not to re-process unnecessarily if we cached it)
+            # Actually with st.cache_data it is fast, but we want to store in session_state.
+            
+            file_content = uploaded_file.getvalue()
+            df, error = clean_big_ambitions_csv(file_content)
+            
+            if error:
+                st.error(f"Error: {error}")
+            else:
+                st.session_state.df = df
+                st.success(f"Loaded {len(df)} rows!")
+        
+        # Show current data status
+    if st.session_state.df is not None:
+            st.caption(f"✅ Active Data: {len(st.session_state.df)} txns")
+            if st.button("🗑️ Clear Data"):
+                st.session_state.df = None
+                st.rerun()
     st.markdown("---")
     
     # Status info
@@ -66,8 +102,11 @@ with st.sidebar:
     **Updated:** December 2025
     """)
     
+
     st.divider()
     
+    
+             
     st.markdown("""
     ### Links
     - [GitHub](https://github.com/raytp29-hub/big-ambitions-analyzer1.0)
@@ -93,73 +132,66 @@ elif page == "📈 Forecasting":
     
     st.divider()
     
-    uploaded_file = st.file_uploader(
-        "📂 Upload your Big Ambitions CSV/XLSM file",
-        type=['csv', 'xlsm'],
-        help="Export transactions from Big Ambitions and upload here",
-        key="forecasting_uploader" 
-    )
+    st.divider()
     
-    if uploaded_file is not None:
-        with st.spinner('🔄 Processing data for forecast...'):
-            file_content = uploaded_file.getvalue()
-            df, error = clean_big_ambitions_csv(file_content)
-            
-        if error:
-            st.error(f"❌ Error: {error}")
-        else:
-            # FORECASTING UI
-            analyzer = ForecastingAnalyzer(df)
+    if st.session_state.df is None:
+        st.info("👈 Please upload your data in the sidebar to start forecasting!")
+    else:
+        # Use data from session state
+        df = st.session_state.df
+        
+        # FORECASTING UI
+        analyzer = ForecastingAnalyzer(df)
             
             # extract business names for filter
-            business_names, _, _ = extract_business_from_revenue(df)
-            business_options = ["All Businesses"] + sorted(business_names)
+        business_names, _, _ = extract_business_from_revenue(df)
+        business_options = ["All Businesses"] + sorted(business_names)
             
-            col1, col2, col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
             
-            with col1:
+        with col1:
                 selected_business = st.selectbox("Select Business", business_options)
             
-            with col2:
+        with col2:
                 selected_metric = st.selectbox("Select Metric", ["profit", "revenue", "wages"])
                 
-            with col3:
-                days_ahead = st.slider("Forecast Horizon (Days)", 7, 30, 14)
+        with col3:
+            days_ahead = st.slider("Forecast Horizon (Days)", 7, 30, 14)
             
-            # Run Forecast
-            result = analyzer.forecast(selected_business, selected_metric, days_ahead, granularity="daily")
+    # Run Forecast
+        result = analyzer.forecast(selected_business, selected_metric, days_ahead, granularity="daily")
+        
+        if "error" in result:
+            st.warning(result["error"])
+        else:
+            st.divider()
             
-            if "error" in result:
-                st.warning(result["error"])
-            else:
-                st.divider()
-                
-                # Metrics
-                trend = result['trend']
-                slope = trend['slope']
-                r2 = trend['r_squared']
-                
-                # Calculate projected growth
-                last_hist_val = result['historical']['y'].iloc[-1]
-                last_forecast_val = result['forecast']['y'].iloc[-1]
-                growth_abs = last_forecast_val - last_hist_val
-                growth_pct = (growth_abs / last_hist_val * 100) if last_hist_val != 0 else 0
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Daily Trend (Slope)", f"${slope:,.2f}/day")
-                m2.metric("Forecast Accuracy (R²)", f"{r2:.2f}")
-                m3.metric(f"Projected Growth ({days_ahead} days)", f"${growth_abs:,.2f}", f"{growth_pct:+.1f}%")
-                
-                # Chart
-                st.subheader("📉 Forecast Visualization")
-                
+            # Metrics
+            trend = result['trend']
+            slope = trend['slope']
+            r2 = trend['r_squared']
+            
+            # Calculate projected growth
+            last_hist_val = result['historical']['y'].iloc[-1]
+            last_forecast_val = result['forecast']['y'].iloc[-1]
+            growth_abs = last_forecast_val - last_hist_val
+            growth_pct = (growth_abs / last_hist_val * 100) if last_hist_val != 0 else 0
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Daily Trend (Slope)", f"${slope:,.2f}/day")
+            m2.metric("Forecast Accuracy (R²)", f"{r2:.2f}")
+            m3.metric(f"Projected Growth ({days_ahead} days)", f"${growth_abs:,.2f}", f"{growth_pct:+.1f}%")
+            
+            # === TABS ===
+            tab_forecast, tab_marketing = st.tabs(["📉 Forecast Visualization", "📢 Marketing Impact"])
+            
+            with tab_forecast:
                 hist_df = result['historical'].copy()
                 hist_df['Type'] = 'Historical'
                 
                 fore_df = result['forecast'].copy()
                 fore_df['Type'] = 'Forecast'
                 
-                # Combine for plotting
                 chart_df = pd.concat([hist_df, fore_df])
                 
                 fig = px.line(
@@ -171,12 +203,6 @@ elif page == "📈 Forecasting":
                     line_dash='Type' 
                 )
                 
-                # Customize line styles
-                # Note: line_dash in px.line maps column values to dash styles automatically if specified?
-                # Actually px.line does not support 'line_dash' as a column mapping argument directly for all versions or it might conflict with 'color'.
-                # Let's keep it simple with color first.
-                # But to make it distinct, we can use update_traces.
-                
                 st.plotly_chart(fig, use_container_width=True)
                 
                 st.info(
@@ -186,73 +212,72 @@ elif page == "📈 Forecasting":
                     "We then project this trend into the future."
                 )
 
-                # === MARKETING IMPACT TAB ===
-                st.divider()
-                st.subheader("📢 Marketing Impact Analysis")
-                
+            with tab_marketing:
+                        
+                    
                 from analysis.marketing_analyzer import MarketingAnalyzer
                 mkt_analyzer = MarketingAnalyzer(df)
-                
+                    
                 mkt_col1, mkt_col2 = st.columns([1, 2])
-                
+                    
                 with mkt_col1:
-                    st.markdown("#### Calculate ROI")
-                    mkt_business = st.selectbox("Analyze Business", business_options, key="mkt_biz_select")
-                    target_metric = st.selectbox("Target Metric", ["revenue", "profit"], key="mkt_metric_select")
-                    
-                    # RUN ANALYSIS
-                    mkt_stats = mkt_analyzer.calculate_correlation(mkt_business, target_metric)
-                    
-                    if "error" in mkt_stats:
-                        st.warning(f"Not enough data for {mkt_business}")
-                    else:
-                        st.success(f"**Correlation:** {mkt_stats['correlation']:.2f}")
-                        if mkt_stats['correlation'] > 0.7:
-                            st.caption("✅ Strong positive correlation!")
-                        elif mkt_stats['correlation'] < 0.3:
-                            st.caption("⚠️ Weak or no correlation.")
+                        st.markdown("#### Calculate ROI")
+                        mkt_business = st.selectbox("Analyze Business", business_options, key="mkt_biz_select")
+                        target_metric = st.selectbox("Target Metric", ["revenue", "profit"], key="mkt_metric_select")
+                        
+                        # RUN ANALYSIS
+                        mkt_stats = mkt_analyzer.calculate_correlation(mkt_business, target_metric)
+                        
+                        if "error" in mkt_stats:
+                            st.warning(f"Not enough data for {mkt_business}")
+                        else:
+                            st.success(f"**Correlation:** {mkt_stats['correlation']:.2f}")
+                            if mkt_stats['correlation'] > 0.7:
+                                st.caption("✅ Strong positive correlation!")
+                            elif mkt_stats['correlation'] < 0.3:
+                                st.caption("⚠️ Weak or no correlation.")
+                                
+                            st.markdown("---")
+                            st.markdown("**Predict Performance**")
                             
-                        st.markdown("---")
-                        st.markdown("**Predict Performance**")
-                        
-                        budget_input = st.number_input(
-                            "Daily Marketing Budget ($)",
-                            min_value=0.0,
-                            value=1000.0,
-                            step=100.0,
-                            format="%.2f"
-                        )
-                        
-                        predicted_val = mkt_analyzer.predict_impact(mkt_business, budget_input, target_metric)
-                        
-                        st.metric(
-                            f"Predicted Daily {target_metric.title()}",
-                            f"${predicted_val:,.2f}"
-                        )
-                        
-                        roi = (predicted_val - budget_input) / budget_input * 100 if budget_input > 0 else 0
-                        if target_metric == "profit":
-                             st.metric("Estimated ROI", f"{roi:+.1f}%")
-                
+                            budget_input = st.number_input(
+                                "Daily Marketing Budget ($)",
+                                min_value=0.0,
+                                value=1000.0,
+                                step=100.0,
+                                format="%.2f"
+                            )
+                            
+                            predicted_val = mkt_analyzer.predict_impact(mkt_business, budget_input, target_metric)
+                            
+                            st.metric(
+                                f"Predicted Daily {target_metric.title()}",
+                                f"${predicted_val:,.2f}"
+                            )
+                            
+                            roi = (predicted_val - budget_input) / budget_input * 100 if budget_input > 0 else 0
+                            if target_metric == "profit":
+                                st.metric("Estimated ROI", f"{roi:+.1f}%")
+                    
                 with mkt_col2:
-                    if "error" not in mkt_stats:
-                         st.markdown(f"#### {mkt_business} - Marketing vs {target_metric.title()}")
-                         
-                         mkt_data = mkt_stats['data']
-                         
-                         fig_mkt = px.scatter(
-                             mkt_data,
-                             x="marketing",
-                             y=target_metric,
-                             trendline="ols", # Requires statsmodels
-                             title=f"Impact of Marketing on {target_metric.title()}",
-                             labels={"marketing": "Marketing Spend ($)", target_metric: f"{target_metric.title()} ($)"}
-                         )
-                         
-                         st.plotly_chart(fig_mkt, use_container_width=True)
-                         
-                         slope = mkt_stats['slope']
-                         st.info(f"💡 **Insight:** For every $1.00 spent on marketing, you generate roughly **${slope:.2f}** in {target_metric}.")
+                        if "error" not in mkt_stats:
+                            st.markdown(f"#### {mkt_business} - Marketing vs {target_metric.title()}")
+                            
+                            mkt_data = mkt_stats['data']
+                            
+                            fig_mkt = px.scatter(
+                                mkt_data,
+                                x="marketing",
+                                y=target_metric,
+                                trendline="ols", # Requires statsmodels
+                                title=f"Impact of Marketing on {target_metric.title()}",
+                                labels={"marketing": "Marketing Spend ($)", target_metric: f"{target_metric.title()} ($)"}
+                            )
+                            
+                            st.plotly_chart(fig_mkt, use_container_width=True)
+                            
+                            slope = mkt_stats['slope']
+                            st.info(f"💡 **Insight:** For every $1.00 spent on marketing, you generate roughly **${slope:.2f}** in {target_metric}.")
 
 else:
     # ========================================================================
@@ -266,63 +291,70 @@ else:
     st.divider()
     
     # File Upload
-    uploaded_file = st.file_uploader(
-        "📂 Upload your Big Ambitions CSV/XLSM file",
-        type=['csv', 'xlsm'],
-        help="Export transactions from Big Ambitions and upload here"
-    )
+    st.divider()
     
-    if uploaded_file is not None:
-        with st.spinner('🔄 Cleaning and processing data...'):
-            # Read file content
-            file_content = uploaded_file.getvalue()
-            
-            # Clean with your cleaner!
-            df, error = clean_big_ambitions_csv(file_content)
+    if st.session_state.df is None:
+        # Welcome message when no file uploaded
+        st.info("👆 **Upload a CSV file to get started!**")
         
-        if error:
-            st.error(f"❌ Error cleaning data: {error}")
-            st.info("💡 Make sure you uploaded a valid Big Ambitions export file")
-        else:
-            st.success(f"✅ Successfully processed {len(df):,} transactions!")
+        st.subheader("📖 How to use:")
+        st.markdown("""
+        1. **Export** your transaction data from Big Ambitions
+        2. **Upload** the CSV/XLSM file using the uploader above
+        3. **Analyze** your business performance with automated insights
+        
+        **Features available:**
+        - 📊 Revenue analysis per business
+        - 💰 Profit & Loss statements
+        - 📈 Trend analysis and forecasting
+        - 🗓️ **NEW:** Employee Schedule Optimizer
+        """)
+        
+        st.divider()
+        
+        st.subheader("✨ Try the Schedule Optimizer!")
+        st.info("💡 No data upload needed! Use the sidebar to navigate to **Schedule Optimizer** and start optimizing your workforce.")
+    else:
+        df = st.session_state.df
+        st.success(f"✅ Analyzing {len(df):,} transactions!")
+        
+        analyzer = TemporalAnalyzer(df)
             
-            analyzer = TemporalAnalyzer(df)
-            
-            # Main Metrics
-            st.subheader("📊 Overview")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric(
-                    label="📋 Total Transactions",
-                    value=f"{len(df):,}"
-                )
-            
-            with col2:
-                st.metric(
-                    label="📅 Days Range",
-                    value=f"{df['day'].min()} - {df['day'].max()}"
-                )
-            
-            with col3:
-                st.metric(
-                    label="📝 Transaction Types",
-                    value=df['type'].nunique()
-                )
-            
-            with col4:
-                total_balance = df['balance'].iloc[-1] if len(df) > 0 else 0
-                st.metric(
-                    label="💰 Final Balance",
-                    value=f"${total_balance:,.0f}"
-                )
-            
-            st.divider()
+        # Main Metrics
+        st.subheader("📊 Overview")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                label="📋 Total Transactions",
+                value=f"{len(df):,}"
+            )
+        
+        with col2:
+            st.metric(
+                label="📅 Days Range",
+                value=f"{df['day'].min()} - {df['day'].max()}"
+            )
+        
+        with col3:
+            st.metric(
+                label="📝 Transaction Types",
+                value=df['type'].nunique()
+            )
+        
+        with col4:
+            total_balance = df['balance'].iloc[-1] if len(df) > 0 else 0
+            st.metric(
+                label="💰 Final Balance",
+                value=f"${total_balance:,.0f}"
+            )
+        
+        st.divider()
             
             # extract revenue from data
-            business_name, revenue_per_business, revenue_df = extract_business_from_revenue(df)
+        business_name, revenue_per_business, revenue_df = extract_business_from_revenue(df)
             
-            if len(business_name) > 0:
+        if len(business_name) > 0:
                 st.subheader("Revenue Analysis")
                 
                 col1, col2 = st.columns([1,2])
@@ -549,271 +581,249 @@ else:
                     st.plotly_chart(fig2, use_container_width=True)
                     st.plotly_chart(fig5, use_container_width=True)
                 
-            else:
-                st.info("💡 No revenue data found in this file")
             
-            st.divider()
-            
-
-
-
-            # === WAGE COST ANALYSIS ===
-            st.subheader("💼 Wage Cost Analysis")
-
-            # Controlli in 2 colonne
-            col1, col2 = st.columns(2)
-
-            with col1:
-                wage_granularity = st.selectbox(
-                    "Time Period",
-                    ["daily", "weekly", "monthly"],
-                    index=1,  # Default to weekly
-                    key="wage_granularity"
-                )
-
-            with col2:
-                # Estrai lista business dai dati
-                business_list = sorted(df[df['type'] == 'Revenue']['description'].apply(
-                    lambda x: x.replace(' Revenue', '').strip()
-                ).unique())
-                
-                # Aggiungi opzione "All"
-                business_options = ["All Businesses"] + business_list
-                
-                selected_business = st.selectbox(
-                    "Business",
-                    options=business_options,
-                    key="wage_business_filter"
-                )
-
-            # Usa TemporalAnalyzer per aggregare
-            wage_temporal_df = analyzer.aggregate_by_period(wage_granularity)
-            
-            # Filtra per business se selezionato
-            if selected_business != "All Businesses":
-                wage_temporal_df = wage_temporal_df[wage_temporal_df['business'] == selected_business]
-
-            # Aggrega wages per periodo
-            wage_by_period = wage_temporal_df.groupby('period_label').agg({
-                'wages': 'sum',
-                'period': 'first'
-            }).reset_index()
-
-            # Ordina per periodo
-            wage_by_period = wage_by_period.sort_values('period')
-
-            # === METRICHE CHIAVE ===
-            if len(wage_by_period) > 0:
-                col1, col2, col3 = st.columns(3)
-                
-                total_wages = wage_by_period['wages'].sum()
-                avg_wages = wage_by_period['wages'].mean()
-                last_period_wages = wage_by_period['wages'].iloc[-1]
-                
-                with col1:
-                    st.metric("Total Wage Costs", f"${total_wages:,.2f}")
-                
-                with col2:
-                    st.metric(f"Average {wage_granularity.title()}", f"${avg_wages:,.2f}")
-                
-                with col3:
-                    # Calcola variazione rispetto al periodo precedente
-                    if len(wage_by_period) >= 2:
-                        prev_wages = wage_by_period['wages'].iloc[-2]
-                        delta_wages = last_period_wages - prev_wages
-                        delta_pct = (delta_wages / prev_wages * 100) if prev_wages > 0 else 0
-                        st.metric(
-                            "Last Period", 
-                            f"${last_period_wages:,.2f}",
-                            delta=f"{delta_pct:+.1f}%",
-                            delta_color="inverse"
-                        )
-                    else:
-                        st.metric("Last Period", f"${last_period_wages:,.2f}")
-                
-                # === GRAFICO TREND ===
-                fig_wages = px.line(
-                    wage_by_period,
-                    x='period_label',
-                    y='wages',
-                    title=f"Wage Costs Over Time - {selected_business} ({wage_granularity.title()})",
-                    markers=True
-                )
-                
-                fig_wages.update_layout(
-                    xaxis_title="Period",
-                    yaxis_title="Wage Cost ($)",
-                    height=400
-                )
-                
-                fig_wages.update_traces(
-                    line_color='#e74c3c',
-                    line_width=3,
-                    marker=dict(size=8)
-                )
-                
-                st.plotly_chart(fig_wages, use_container_width=True)
-                
-                # === BREAKDOWN PER BUSINESS (solo se "All Businesses") ===
-                if selected_business == "All Businesses":
-                    with st.expander("📊 Wage Breakdown by Business"):
-                        wage_by_business = wage_temporal_df.groupby(['period_label', 'business']).agg({
-                            'wages': 'sum',
-                            'period': 'first'
-                        }).reset_index()
-                        
-                        wage_by_business = wage_by_business.sort_values('period')
-                        
-                        fig_wages_business = px.bar(
-                            wage_by_business,
-                            x='period_label',
-                            y='wages',
-                            color='business',
-                            title=f"Wage Costs by Business ({wage_granularity.title()})",
-                            barmode='stack'
-                        )
-                        
-                        fig_wages_business.update_layout(
-                            xaxis_title="Period",
-                            yaxis_title="Wage Cost ($)",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig_wages_business, use_container_width=True)
-                        
-                        # Tabella dettagliata
-                        st.markdown("**Detailed Breakdown:**")
-                        pivot_wages = wage_by_business.pivot(
-                            index='business',
-                            columns='period_label',
-                            values='wages'
-                        ).fillna(0)
-                        
-                        # Aggiungi totale per riga
-                        pivot_wages['Total'] = pivot_wages.sum(axis=1)
-                        
-                        # Ordina per totale decrescente
-                        pivot_wages = pivot_wages.sort_values('Total', ascending=False)
-                        
-                        st.dataframe(
-                            pivot_wages.style.format('${:,.2f}'),
-                            use_container_width=True
-                        )
-                else:
-                    # Mostra dettagli per singolo business
-                    with st.expander(f"📋 Detailed Period Breakdown for {selected_business}"):
-                        # Tabella con tutti i periodi
-                        st.dataframe(
-                            wage_by_period[['period_label', 'wages']].style.format({
-                                'wages': '${:,.2f}'
-                            }),
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                        
-                        # Statistiche aggiuntive
-                        st.markdown("**Statistics:**")
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.metric("Min Period", f"${wage_by_period['wages'].min():,.2f}")
-                        with col2:
-                            st.metric("Max Period", f"${wage_by_period['wages'].max():,.2f}")
-                        with col3:
-                            std_wages = wage_by_period['wages'].std()
-                            st.metric("Std Deviation", f"${std_wages:,.2f}")
-
-            else:
-                st.info(f"No wage data found for {selected_business}")
-
-            st.divider()
-                        
-            # === TABS SECTION ===
-            tab1, tab2, tab3 = st.tabs(["📋 Data Preview", "📊 Statistics", "🔍 Filters"])
-            
-            with tab1:
-                st.subheader("Transaction Data")
-                
-                # Number of rows to display
-                num_rows = st.slider("Number of rows to display:", 10, 100, 20)
-                
-                st.dataframe(
-                    df.head(num_rows),
-                    use_container_width=True,
-                    height=400
-                )
-                
-                # Download button
-                st.download_button(
-                    label="💾 Download Cleaned Data (CSV)",
-                    data=df.to_csv(index=False),
-                    file_name="big_ambitions_cleaned.csv",
-                    mime="text/csv"
-                )
-            
-            with tab2:
-                st.subheader("Data Statistics")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("**Numeric Columns Summary:**")
-                    st.dataframe(df.describe(), use_container_width=True)
-                
-                with col2:
-                    st.write("**Transaction Types:**")
-                    type_counts = df['type'].value_counts()
-                    st.dataframe(type_counts, use_container_width=True)
-            
-            with tab3:
-                st.subheader("Filter Data")
-                
-                # Filter by transaction type
-                selected_types = st.multiselect(
-                    "Select transaction types:",
-                    options=df['type'].unique(),
-                    default=df['type'].unique()
-                )
-                
-                # Filter by day range
-                min_day, max_day = int(df['day'].min()), int(df['day'].max())
-                day_range = st.slider(
-                    "Select day range:",
-                    min_day, max_day,
-                    (min_day, max_day)
-                )
-                
-                # Apply filters
-                filtered_df = df[
-                    (df['type'].isin(selected_types)) &
-                    (df['day'] >= day_range[0]) &
-                    (df['day'] <= day_range[1])
-                ]
-                
-                st.metric("Filtered Transactions", f"{len(filtered_df):,}")
-                st.dataframe(filtered_df, use_container_width=True, height=300)
-    
-    else:
-        # Welcome message when no file uploaded
-        st.info("👆 **Upload a CSV file to get started!**")
-        
-        st.subheader("📖 How to use:")
-        st.markdown("""
-        1. **Export** your transaction data from Big Ambitions
-        2. **Upload** the CSV/XLSM file using the uploader above
-        3. **Analyze** your business performance with automated insights
-        
-        **Features available:**
-        - 📊 Revenue analysis per business
-        - 💰 Profit & Loss statements
-        - 📈 Trend analysis and forecasting
-        - 🗓️ **NEW:** Employee Schedule Optimizer
-        """)
+        else:
+            st.info("💡 No revenue data found in this file")
         
         st.divider()
         
-        st.subheader("✨ Try the Schedule Optimizer!")
-        st.info("💡 No data upload needed! Use the sidebar to navigate to **Schedule Optimizer** and start optimizing your workforce.")
+        # === WAGE COST ANALYSIS ===
+        st.subheader("💼 Wage Cost Analysis")
+        
+        # Controlli in 2 colonne
+        col1, col2 = st.columns(2)
+
+        with col1:
+            wage_granularity = st.selectbox(
+                "Time Period",
+                ["daily", "weekly", "monthly"],
+                index=1,  # Default to weekly
+                key="wage_granularity"
+            )
+
+        with col2:
+            # Estrai lista business dai dati
+            business_list = sorted(df[df['type'] == 'Revenue']['description'].apply(
+                lambda x: x.replace(' Revenue', '').strip()
+            ).unique())
+            
+            # Aggiungi opzione "All"
+            business_options = ["All Businesses"] + business_list
+            
+            selected_business = st.selectbox(
+                "Business",
+                options=business_options,
+                key="wage_business_filter"
+            )
+
+        # Usa TemporalAnalyzer per aggregare
+        wage_temporal_df = analyzer.aggregate_by_period(wage_granularity)
+        
+        # Filtra per business se selezionato
+        if selected_business != "All Businesses":
+            wage_temporal_df = wage_temporal_df[wage_temporal_df['business'] == selected_business]
+
+        # Aggrega wages per periodo
+        wage_by_period = wage_temporal_df.groupby('period_label').agg({
+            'wages': 'sum',
+            'period': 'first'
+        }).reset_index()
+
+        # Ordina per periodo
+        wage_by_period = wage_by_period.sort_values('period')
+
+        # === METRICHE CHIAVE ===
+        if len(wage_by_period) > 0:
+            col1, col2, col3 = st.columns(3)
+            
+            total_wages = wage_by_period['wages'].sum()
+            avg_wages = wage_by_period['wages'].mean()
+            last_period_wages = wage_by_period['wages'].iloc[-1]
+            
+            with col1:
+                st.metric("Total Wage Costs", f"${total_wages:,.2f}")
+            
+            with col2:
+                st.metric(f"Average {wage_granularity.title()}", f"${avg_wages:,.2f}")
+            
+            with col3:
+                # Calcola variazione rispetto al periodo precedente
+                if len(wage_by_period) >= 2:
+                    prev_wages = wage_by_period['wages'].iloc[-2]
+                    delta_wages = last_period_wages - prev_wages
+                    delta_pct = (delta_wages / prev_wages * 100) if prev_wages > 0 else 0
+                    st.metric(
+                        "Last Period", 
+                        f"${last_period_wages:,.2f}",
+                        delta=f"{delta_pct:+.1f}%",
+                        delta_color="inverse"
+                    )
+                else:
+                    st.metric("Last Period", f"${last_period_wages:,.2f}")
+            
+            # === GRAFICO TREND ===
+            fig_wages = px.line(
+                wage_by_period,
+                x='period_label',
+                y='wages',
+                title=f"Wage Costs Over Time - {selected_business} ({wage_granularity.title()})",
+                markers=True
+            )
+            
+            fig_wages.update_layout(
+                xaxis_title="Period",
+                yaxis_title="Wage Cost ($)",
+                height=400
+            )
+            
+            fig_wages.update_traces(
+                line_color='#e74c3c',
+                line_width=3,
+                marker=dict(size=8)
+            )
+            
+            st.plotly_chart(fig_wages, use_container_width=True)
+            
+            # === BREAKDOWN PER BUSINESS (solo se "All Businesses") ===
+            if selected_business == "All Businesses":
+                with st.expander("📊 Wage Breakdown by Business"):
+                    wage_by_business = wage_temporal_df.groupby(['period_label', 'business']).agg({
+                        'wages': 'sum',
+                        'period': 'first'
+                    }).reset_index()
+                    
+                    wage_by_business = wage_by_business.sort_values('period')
+                    
+                    fig_wages_business = px.bar(
+                        wage_by_business,
+                        x='period_label',
+                        y='wages',
+                        color='business',
+                        title=f"Wage Costs by Business ({wage_granularity.title()})",
+                        barmode='stack'
+                    )
+                    
+                    fig_wages_business.update_layout(
+                        xaxis_title="Period",
+                        yaxis_title="Wage Cost ($)",
+                        height=400
+                    )
+                    
+                    st.plotly_chart(fig_wages_business, use_container_width=True)
+                    
+                    # Tabella dettagliata
+                    st.markdown("**Detailed Breakdown:**")
+                    pivot_wages = wage_by_business.pivot(
+                        index='business',
+                        columns='period_label',
+                        values='wages'
+                    ).fillna(0)
+                    
+                    # Aggiungi totale per riga
+                    pivot_wages['Total'] = pivot_wages.sum(axis=1)
+                    
+                    # Ordina per totale decrescente
+                    pivot_wages = pivot_wages.sort_values('Total', ascending=False)
+                    
+                    st.dataframe(
+                        pivot_wages.style.format('${:,.2f}'),
+                        use_container_width=True
+                    )
+            else:
+                # Mostra dettagli per singolo business
+                with st.expander(f"📋 Detailed Period Breakdown for {selected_business}"):
+                    # Tabella con tutti i periodi
+                    st.dataframe(
+                        wage_by_period[['period_label', 'wages']].style.format({
+                            'wages': '${:,.2f}'
+                        }),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Statistiche aggiuntive
+                    st.markdown("**Statistics:**")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric("Min Period", f"${wage_by_period['wages'].min():,.2f}")
+                    with col2:
+                        st.metric("Max Period", f"${wage_by_period['wages'].max():,.2f}")
+                    with col3:
+                        std_wages = wage_by_period['wages'].std()
+                        st.metric("Std Deviation", f"${std_wages:,.2f}")
+
+        else:
+            st.info(f"No wage data found for {selected_business}")
+
+        st.divider()
+                    
+        # === TABS SECTION ===
+        tab1, tab2, tab3 = st.tabs(["📋 Data Preview", "📊 Statistics", "🔍 Filters"])
+        
+        with tab1:
+            st.subheader("Transaction Data")
+            
+            # Number of rows to display
+            num_rows = st.slider("Number of rows to display:", 10, 100, 20)
+            
+            st.dataframe(
+                df.head(num_rows),
+                use_container_width=True,
+                height=400
+            )
+            
+            # Download button
+            st.download_button(
+                label="💾 Download Cleaned Data (CSV)",
+                data=df.to_csv(index=False),
+                file_name="big_ambitions_cleaned.csv",
+                mime="text/csv"
+            )
+        
+        with tab2:
+            st.subheader("Data Statistics")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Numeric Columns Summary:**")
+                st.dataframe(df.describe(), use_container_width=True)
+            
+            with col2:
+                st.write("**Transaction Types:**")
+                type_counts = df['type'].value_counts()
+                st.dataframe(type_counts, use_container_width=True)
+        
+        with tab3:
+            st.subheader("Filter Data")
+            
+            # Filter by transaction type
+            selected_types = st.multiselect(
+                "Select transaction types:",
+                options=df['type'].unique(),
+                default=df['type'].unique()
+            )
+            
+            # Filter by day range
+            min_day, max_day = int(df['day'].min()), int(df['day'].max())
+            day_range = st.slider(
+                "Select day range:",
+                min_day, max_day,
+                (min_day, max_day)
+            )
+            
+            # Apply filters
+            filtered_df = df[
+                (df['type'].isin(selected_types)) &
+                (df['day'] >= day_range[0]) &
+                (df['day'] <= day_range[1])
+            ]
+            
+            st.metric("Filtered Transactions", f"{len(filtered_df):,}")
+            st.dataframe(filtered_df, use_container_width=True, height=300)
+
+
 
 # Footer
 st.divider()
