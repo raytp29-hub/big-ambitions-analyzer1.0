@@ -218,73 +218,26 @@ elif page == "📈 Forecasting":
                     "We then project this trend into the future."
                 )
 
-            with tab_marketing:
-                        
-                    
+        with tab_marketing:
                 from analysis.marketing_analyzer import MarketingAnalyzer
                 mkt_analyzer = MarketingAnalyzer(df)
+                
+                mkt_business = st.selectbox("Analyze Business", business_options, key="mkt_biz_select")
+                
+                dim_result = mkt_analyzer.difference_in_means(mkt_business)
+                
+                if "error" in dim_result:
+                    st.warning(dim_result["error"])
+                else:
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Avg Revenue (Marketing ON)", f"${dim_result['mean_revenue_on']:,.0f}")
+                    m2.metric("Avg Revenue (Marketing OFF)", f"${dim_result['mean_revenue_off']:,.0f}")
+                    m3.metric("Delta", f"${dim_result['delta']:,.0f}")
+                    m4.metric("Delta %", f"{dim_result['delta_pct']:+.1f}%")           
                     
-                mkt_col1, mkt_col2 = st.columns([1, 2])
+               
                     
-                with mkt_col1:
-                        st.markdown("#### Calculate ROI")
-                        mkt_business = st.selectbox("Analyze Business", business_options, key="mkt_biz_select")
-                        target_metric = st.selectbox("Target Metric", ["revenue", "profit"], key="mkt_metric_select")
-                        
-                        # RUN ANALYSIS
-                        mkt_stats = mkt_analyzer.calculate_correlation(mkt_business, target_metric)
-                        
-                        if "error" in mkt_stats:
-                            st.warning(f"Not enough data for {mkt_business}")
-                        else:
-                            st.success(f"**Correlation:** {mkt_stats['correlation']:.2f}")
-                            if mkt_stats['correlation'] > 0.7:
-                                st.caption("✅ Strong positive correlation!")
-                            elif mkt_stats['correlation'] < 0.3:
-                                st.caption("⚠️ Weak or no correlation.")
-                                
-                            st.markdown("---")
-                            st.markdown("**Predict Performance**")
-                            
-                            budget_input = st.number_input(
-                                "Daily Marketing Budget ($)",
-                                min_value=0.0,
-                                value=1000.0,
-                                step=100.0,
-                                format="%.2f"
-                            )
-                            
-                            predicted_val = mkt_analyzer.predict_impact(mkt_business, budget_input, target_metric)
-                            
-                            st.metric(
-                                f"Predicted Daily {target_metric.title()}",
-                                f"${predicted_val:,.2f}"
-                            )
-                            
-                            roi = (predicted_val - budget_input) / budget_input * 100 if budget_input > 0 else 0
-                            if target_metric == "profit":
-                                st.metric("Estimated ROI", f"{roi:+.1f}%")
-                    
-                with mkt_col2:
-                        if "error" not in mkt_stats:
-                            st.markdown(f"#### {mkt_business} - Marketing vs {target_metric.title()}")
-                            
-                            mkt_data = mkt_stats['data']
-                            
-                            fig_mkt = px.scatter(
-                                mkt_data,
-                                x="marketing",
-                                y=target_metric,
-                                trendline="ols", # Requires statsmodels
-                                title=f"Impact of Marketing on {target_metric.title()}",
-                                labels={"marketing": "Marketing Spend ($)", target_metric: f"{target_metric.title()} ($)"}
-                            )
-                            
-                            st.plotly_chart(fig_mkt, use_container_width=True)
-                            
-                            slope = mkt_stats['slope']
-                            st.info(f"💡 **Insight:** For every $1.00 spent on marketing, you generate roughly **${slope:.2f}** in {target_metric}.")
-
+                
 else:
     # ========================================================================
     # MAIN DASHBOARD PAGE (your existing code)

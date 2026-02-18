@@ -7,6 +7,10 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
 
+from analysis.temporal_analyzer import TemporalAnalyzer
+
+
+
 class MarketingAnalyzer:
     """
     Analyzes the impact of marketing on business performance.
@@ -20,7 +24,7 @@ class MarketingAnalyzer:
         Aggregates data to have Marketing Cost vs Revenue/Profit side-by-side.
         """
         # Reuse temporal aggregation to get daily/weekly stats
-        from analysis.temporal_analyzer import TemporalAnalyzer
+        
         analyzer = TemporalAnalyzer(self.df)
         
         # Get raw aggregated data
@@ -102,3 +106,36 @@ class MarketingAnalyzer:
         
         prediction = slope * marketing_budget + intercept
         return max(0.0, prediction) # No negative revenue
+
+
+    def difference_in_means(self, business_name:str, granularity: str = 'daily'):
+        marketing_df = self.df[
+            (self.df['type'] == 'Marketing') &
+            (self.df['description'].str.contains(business_name))
+        ]
+        
+        
+        marketing_days = set(marketing_df['day'].unique())
+        
+        data = self.prepare_marketing_data(business_name, granularity)
+        min_day = self.df['day'].min()
+        marketing_days_relative = set(d - min_day for d in marketing_days)
+        data['marketing_on'] = data['period'].isin(marketing_days_relative)
+        
+        means = data.groupby('marketing_on')['revenue'].mean()
+        if False not in means.index or True not in means.index:
+            return {"error": "Not enough marketing ON/OFF days to compare"}
+        mean_off = means[False]
+        mean_on = means[True]
+        
+        delta = mean_on - mean_off
+        delta_pct = (delta / mean_off) * 100
+        
+        
+        return {
+            "business": business_name,
+            "mean_revenue_on": mean_on,
+            "mean_revenue_off":mean_off,
+            "delta": delta,
+            "delta_pct": delta_pct   
+        }
