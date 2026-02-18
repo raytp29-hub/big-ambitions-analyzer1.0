@@ -68,7 +68,7 @@ class ForecastingAnalyzer:
             
         return slope, intercept, r_squared
 
-    def forecast(self, business_name: str, metric: str = 'profit', days_ahead: int = 7, granularity: str = 'daily') -> Dict:
+    def forecast(self, business_name: str, metric: str = 'profit', days_ahead: int = 7, granularity: str = 'daily', method: str = 'linear') -> Dict:
         """
         Generates a complete forecast report.
         
@@ -80,10 +80,15 @@ class ForecastingAnalyzer:
         """
         # 1. Prepare Data
         df = self.prepare_data(business_name, metric, granularity)
-        
+    
         if df.empty or len(df) < 2:
             return {"error": "Not enough data to forecast"}
-            
+    
+        # 2. Route to correct method
+        if method == 'moving_average':
+            return self.moving_average(df, days_ahead)
+    
+        # 3. Linear regression (existing code)
         x = df['x'].values
         y = df['y'].values
         
@@ -118,4 +123,44 @@ class ForecastingAnalyzer:
             },
             "metric": metric,
             "granularity": granularity
+        }
+
+
+    def moving_average(self, df: pd.DataFrame, days_ahead: int, window: int = 7) -> Dict:
+        """
+        Forecast using simple moving average.
+        """
+
+        if len(df) < window:
+            return {"error": "Not enough data for moving average"}
+        
+        
+        x = df['x'].values
+        y = df['y'].values
+
+        y_series = pd.Series(y)
+        rolling_avg = y_series.rolling(window=window).mean()
+
+        last_avg = rolling_avg.iloc[-1]
+
+        last_x = x[-1]
+        future_x = np.arange(last_x + 1, last_x + 1 + days_ahead)
+        future_y = np.full(days_ahead, last_avg)
+
+        forecast_df = pd.DataFrame({'x': future_x, 'y': future_y})
+
+        smoothed_df = df.copy()
+        smoothed_df["y_smotheed"] = rolling_avg.values
+
+        return {
+            "historical": df,
+            "forecast": forecast_df,
+            "smoothed": smoothed_df.dropna(),
+            "trend": {
+                "slope": 0.0,
+                "intercept": last_avg,
+                "r_squared": None
+            },
+            "last_avg": last_avg,
+            "window": window
         }

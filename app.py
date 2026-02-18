@@ -157,9 +157,11 @@ elif page == "📈 Forecasting":
                 
         with col3:
             days_ahead = st.slider("Forecast Horizon (Days)", 7, 30, 14)
-            
+        forecast_method = st.radio("Forecast Method", ["Linear Regression", "Moving Average"], horizontal=True)
+        method_key = "linear" if forecast_method == "Linear Regression" else "moving_average"
+   
     # Run Forecast
-        result = analyzer.forecast(selected_business, selected_metric, days_ahead, granularity="daily")
+        result = analyzer.forecast(selected_business, selected_metric, days_ahead, granularity="daily", method=method_key)
         
         if "error" in result:
             st.warning(result["error"])
@@ -178,10 +180,14 @@ elif page == "📈 Forecasting":
             growth_pct = (growth_abs / last_hist_val * 100) if last_hist_val != 0 else 0
             
             m1, m2, m3 = st.columns(3)
-            m1.metric("Daily Trend (Slope)", f"${slope:,.2f}/day")
-            m2.metric("Forecast Accuracy (R²)", f"{r2:.2f}")
-            m3.metric(f"Projected Growth ({days_ahead} days)", f"${growth_abs:,.2f}", f"{growth_pct:+.1f}%")
-            
+            if method_key == "linear":
+                m1.metric("Daily Trend (Slope)", f"${slope:,.0f}/day")
+                m2.metric("R²", f"{r2:.2f}")
+                m3.metric(f"Growth ({days_ahead}d)", f"${growth_abs:,.0f}", f"{growth_pct:+.1f}%")
+            else:
+                m1.metric(f"Moving Avg ({result.get('window', 7)}d)", f"${result['last_avg']:,.0f}")
+                m2.metric("Method", "SMA")
+                m3.metric(f"Projected ({days_ahead}d)", f"${result['last_avg']:,.0f}")
             # === TABS ===
             tab_forecast, tab_marketing = st.tabs(["📉 Forecast Visualization", "📢 Marketing Impact"])
             
