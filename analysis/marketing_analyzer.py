@@ -5,6 +5,7 @@ Analyzes the correlation between Marketing Spend and Revenue/Profit.
 
 import pandas as pd
 import numpy as np
+import statsmodels.api as sm
 from typing import Dict, Optional, Tuple
 
 from analysis.temporal_analyzer import TemporalAnalyzer
@@ -131,11 +132,36 @@ class MarketingAnalyzer:
         delta = mean_on - mean_off
         delta_pct = (delta / mean_off) * 100
         
-        
+        data['day'] = data['period'] + self.df['day'].min()
         return {
             "business": business_name,
             "mean_revenue_on": mean_on,
             "mean_revenue_off":mean_off,
             "delta": delta,
-            "delta_pct": delta_pct   
+            "delta_pct": delta_pct,
+            "data": data   
+        }
+        
+    def regression_with_time_control(self, business_name: str, granularity: str = 'daily') -> Dict:
+        
+        dim_result = self.difference_in_means(business_name, granularity)
+        if "error" in dim_result:
+            return {"error": dim_result["error"]}
+        data = dim_result['data']
+        data = dim_result['data']
+        
+        X = data[['marketing_on', 'day']].astype(float)
+        Y = data['revenue'].astype(float)
+        
+        X = sm.add_constant(X)
+        model = sm.OLS(Y, X).fit()
+        
+        
+        return {
+            "data": dim_result,
+            "p_value_marketing": model.pvalues['marketing_on'],
+            "r_squared": model.rsquared,
+            "beta_marketing": model.params['marketing_on'],
+            "beta_time": model.params['day'],
+            "beta_const": model.params['const']
         }

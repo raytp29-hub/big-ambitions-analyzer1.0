@@ -15,7 +15,7 @@ import plotly.express as px
 # Import Schedule Optimizer page
 from visualization.schedule_page import render_schedule_optimizer_page
 from analysis.forecasting import ForecastingAnalyzer
-
+from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
 
 
@@ -99,7 +99,7 @@ with st.sidebar:
     business data with professional insights.
     
     **Version:** 2.0.0  
-    **Updated:** December 2025
+    **Updated:** February 2026
     """)
     
 
@@ -219,25 +219,68 @@ elif page == "📈 Forecasting":
                 )
 
         with tab_marketing:
-                from analysis.marketing_analyzer import MarketingAnalyzer
+                
                 mkt_analyzer = MarketingAnalyzer(df)
                 
                 mkt_business = st.selectbox("Analyze Business", business_options, key="mkt_biz_select")
                 
                 dim_result = mkt_analyzer.difference_in_means(mkt_business)
+                reg_result = mkt_analyzer.regression_with_time_control(mkt_business)
+                
                 
                 if "error" in dim_result:
                     st.warning(dim_result["error"])
                 else:
-                    m1, m2, m3, m4 = st.columns(4)
+                    
+                    m1, m2, m3, m4, m5 = st.columns(5)
                     m1.metric("Avg Revenue (Marketing ON)", f"${dim_result['mean_revenue_on']:,.0f}")
                     m2.metric("Avg Revenue (Marketing OFF)", f"${dim_result['mean_revenue_off']:,.0f}")
                     m3.metric("Delta", f"${dim_result['delta']:,.0f}")
                     m4.metric("Delta %", f"{dim_result['delta_pct']:+.1f}%")           
-                    
-               
-                    
+                    m5.metric("Regression", f"${reg_result['beta_marketing']:,.0f}")
                 
+                
+                    beta0 = reg_result['beta_const']
+                    beta1 = reg_result["beta_marketing"]
+                    beta2 = reg_result['beta_time']
+                    
+                    data = dim_result['data']
+                    y_pred = beta0 + (beta1 * data['marketing_on']) + (beta2 * data['day']) 
+                    
+                    data['y_pred'] = y_pred
+                    
+                    fig1 = go.Figure()
+                    
+                    fig1.add_trace(go.Scatter(
+                        x=data[data['marketing_on'] == False]['day'],
+                        y=data[data['marketing_on'] == False]['revenue'],
+                        name='Marketing OFF'
+                    ))
+                    
+                    fig1.add_trace(go.Scatter(
+                        x=data[data['marketing_on'] == True]['day'],
+                        y=data[data['marketing_on'] == True]['revenue'],
+                        name='Marketing ON'
+                    ))
+                    
+                    fig1.add_trace(go.Scatter(
+                        x=data['day'],
+                        y=data['y_pred'],
+                        name='Regression Line'
+                    ))
+
+                    
+                    st.plotly_chart(fig1, use_container_width=True)
+                    st.markdown(
+                            "📊 **How to read this chart:** <br>"
+                            "🔵 **Marketing OFF** = revenue on days without marketing <br>"
+                            "🔵 **Marketing ON** = revenue on days with active marketing <br>"
+                            "🔴 **Regression Line** = predicted trend controlling for natural business growth <br>"
+                            f"**Marketing effect (β₁):** ${reg_result['beta_marketing']:,.0f} | "
+                            f"**P-value:** {reg_result['p_value_marketing']:.3f} (p < 0.05 = statistically significant) | "
+                            f"**R²:** {reg_result['r_squared']:.2f}",
+                            unsafe_allow_html=True
+                        )
 else:
     # ========================================================================
     # MAIN DASHBOARD PAGE (your existing code)
