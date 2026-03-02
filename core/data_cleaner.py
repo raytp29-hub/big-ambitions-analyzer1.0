@@ -73,7 +73,7 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
         
         # STEP 2: Detect format
         format_type = detect_csv_format(content)
-        print(f"🔍 Detected format: {format_type}")
+        print(f"Detected format: {format_type}")
         
         if format_type == 'standard':
             # ============================================================
@@ -85,7 +85,7 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
                 header=0  # Skip first row (it becomes column names)
             )
             
-            print(f"✅ Parsed as standard CSV: {len(df)} rows")
+            print(f"Parsed as standard CSV: {len(df)} rows")
             
         else:
             # ============================================================
@@ -132,7 +132,7 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
                 columns=["description", "day", "type", "price", "balance"]
             )
             
-            print(f"✅ Parsed as single column: {len(df)} rows")
+            print(f"Parsed as single column: {len(df)} rows")
         
         # ============================================================
         # COMMON CLEANING FOR BOTH FORMATS
@@ -154,13 +154,13 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
             return None, "No valid data after cleaning"
         
         # Final stats
-        print(f"📊 Final: {len(df)} transactions | Days: {df['day'].min():.0f}-{df['day'].max():.0f} | Types: {df['type'].nunique()}")
+        print(f"Final: {len(df)} transactions | Days: {df['day'].min():.0f}-{df['day'].max():.0f} | Types: {df['type'].nunique()}")
         
         return df, None
         
     except Exception as e:
         error_msg = f"Cleaning error: {str(e)}"
-        print(f"❌ {error_msg}")
+        print(f"ERROR: {error_msg}")
         return None, error_msg
 
 
@@ -180,9 +180,9 @@ if __name__ == "__main__":
         df, error = clean_big_ambitions_csv(content)
         
         if error:
-            print(f"\n❌ Error: {error}")
+            print(f"\nError: {error}")
         else:
-            print(f"\n✅ Success!")
+            print(f"\nSuccess!")
             print(f"\nShape: {df.shape}")
             print(f"Columns: {df.columns.tolist()}")
             print(f"\nFirst 3 rows:")

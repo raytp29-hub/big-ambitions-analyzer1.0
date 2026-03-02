@@ -5,6 +5,7 @@ Main Streamlit Application
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 from analysis.temporal_analyzer import TemporalAnalyzer
 from core.data_cleaner import clean_big_ambitions_csv
 from analysis.revenue_analyzer import extract_business_from_revenue
@@ -219,68 +220,200 @@ elif page == "📈 Forecasting":
                 )
 
         with tab_marketing:
-                
+
                 mkt_analyzer = MarketingAnalyzer(df)
-                
+
                 mkt_business = st.selectbox("Analyze Business", business_options, key="mkt_biz_select")
-                
+
+                # --- Section 1: Difference in Means + T-Test ---
+                st.subheader("Marketing ON vs OFF")
                 dim_result = mkt_analyzer.difference_in_means(mkt_business)
                 reg_result = mkt_analyzer.regression_with_time_control(mkt_business)
-                
-                
+
                 if "error" in dim_result:
                     st.warning(dim_result["error"])
                 else:
-                    
-                    m1, m2, m3, m4, m5 = st.columns(5)
-                    m1.metric("Avg Revenue (Marketing ON)", f"${dim_result['mean_revenue_on']:,.0f}")
-                    m2.metric("Avg Revenue (Marketing OFF)", f"${dim_result['mean_revenue_off']:,.0f}")
-                    m3.metric("Delta", f"${dim_result['delta']:,.0f}")
-                    m4.metric("Delta %", f"{dim_result['delta_pct']:+.1f}%")           
-                    m5.metric("Regression", f"${reg_result['beta_marketing']:,.0f}")
-                
-                
+                    # Sample size warning
+                    n_on = dim_result['n_on']
+                    n_off = dim_result['n_off']
+                    n_total = n_on + n_off
+                    if n_total < 30:
+                        st.warning(
+                            f"**Low sample size ({n_total} data points).** "
+                            f"Statistical results may not be reliable. "
+                            f"For more accurate analysis, try to collect at least 30+ days of game data "
+                            f"(currently: {n_on} days with marketing, {n_off} days without)."
+                        )
+
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Avg Revenue (ON)", f"${dim_result['mean_revenue_on']:,.0f}")
+                    m2.metric("Avg Revenue (OFF)", f"${dim_result['mean_revenue_off']:,.0f}")
+                    m3.metric("Delta", f"${dim_result['delta']:,.0f}", delta=f"{dim_result['delta_pct']:+.1f}%")
+                    # T-test significance
+                    p_val = dim_result['p_value']
+                    sig_label = "Significant" if p_val < 0.05 else "Not Significant"
+                    m4.metric("T-Test", sig_label, delta=f"p={p_val:.3f}")
+
+                    # Regression chart
                     beta0 = reg_result['beta_const']
                     beta1 = reg_result["beta_marketing"]
                     beta2 = reg_result['beta_time']
-                    
+
                     data = dim_result['data']
-                    y_pred = beta0 + (beta1 * data['marketing_on']) + (beta2 * data['day']) 
-                    
+                    y_pred = beta0 + (beta1 * data['marketing_on']) + (beta2 * data['day'])
                     data['y_pred'] = y_pred
-                    
+
                     fig1 = go.Figure()
-                    
                     fig1.add_trace(go.Scatter(
                         x=data[data['marketing_on'] == False]['day'],
                         y=data[data['marketing_on'] == False]['revenue'],
-                        name='Marketing OFF'
+                        name='Marketing OFF',
+                        mode='markers',
+                        marker=dict(color='#636EFA', size=8)
                     ))
-                    
                     fig1.add_trace(go.Scatter(
                         x=data[data['marketing_on'] == True]['day'],
                         y=data[data['marketing_on'] == True]['revenue'],
-                        name='Marketing ON'
+                        name='Marketing ON',
+                        mode='markers',
+                        marker=dict(color='#00CC96', size=8)
                     ))
-                    
                     fig1.add_trace(go.Scatter(
                         x=data['day'],
                         y=data['y_pred'],
-                        name='Regression Line'
+                        name='Regression Line',
+                        mode='lines',
+                        line=dict(color='#EF553B', dash='dash')
                     ))
-
-                    
+                    fig1.update_layout(
+                        title=f"Revenue by Marketing Status - {mkt_business}",
+                        xaxis_title="Day",
+                        yaxis_title="Revenue ($)",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
                     st.plotly_chart(fig1, use_container_width=True)
+
                     st.markdown(
-                            "📊 **How to read this chart:** <br>"
-                            "🔵 **Marketing OFF** = revenue on days without marketing <br>"
-                            "🔵 **Marketing ON** = revenue on days with active marketing <br>"
-                            "🔴 **Regression Line** = predicted trend controlling for natural business growth <br>"
-                            f"**Marketing effect (β₁):** ${reg_result['beta_marketing']:,.0f} | "
-                            f"**P-value:** {reg_result['p_value_marketing']:.3f} (p < 0.05 = statistically significant) | "
-                            f"**R²:** {reg_result['r_squared']:.2f}",
+                        "**How to read this chart:**<br>"
+                        "Each dot is one day of your business. "
+                        "**Blue dots** are days where you did NOT spend on marketing. "
+                        "**Green dots** are days where marketing was active. "
+                        "The **red dashed line** shows the expected revenue trend, "
+                        "accounting for the fact that your business naturally grows over time.<br><br>"
+                        "**Key numbers explained:**<br>"
+                        f"- **Marketing effect: ${reg_result['beta_marketing']:,.0f}** — "
+                        f"This is how much extra revenue marketing adds on average per day. "
+                        f"{'A positive number means marketing is helping.' if reg_result['beta_marketing'] > 0 else 'A negative number suggests marketing may not be effective.'}<br>"
+                        f"- **P-value: {reg_result['p_value_marketing']:.3f}** — "
+                        f"This tells us if the marketing effect is real or just random chance. "
+                        f"{'Below 0.05 means we can be confident the effect is real.' if reg_result['p_value_marketing'] < 0.05 else 'Above 0.05 means we cannot be sure yet — the difference could be due to chance. More data would help.'}<br>"
+                        f"- **R2: {reg_result['r_squared']:.2f}** — "
+                        f"How well this model explains your revenue (0 = not at all, 1 = perfectly). "
+                        f"{'Good fit.' if reg_result['r_squared'] > 0.5 else 'Low fit — other factors besides marketing are driving revenue.'}",
+                        unsafe_allow_html=True
+                    )
+
+                # --- Section 2: Correlation & ROI ---
+                st.divider()
+                st.subheader("Marketing Spend vs Revenue (Correlation)")
+
+                corr_result = mkt_analyzer.calculate_correlation(mkt_business, target_metric='revenue')
+
+                if "error" in corr_result:
+                    st.warning(corr_result["error"])
+                else:
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Pearson Correlation", f"{corr_result['correlation']:.3f}")
+                    c2.metric("ROI (slope)", f"${corr_result['slope']:.2f}", help="For every $1 spent on marketing, revenue changes by this amount")
+                    c3.metric("R2", f"{corr_result['r_squared']:.3f}")
+
+                    # Scatter plot: marketing spend vs revenue
+                    corr_data = corr_result['data']
+                    if corr_data['marketing'].sum() > 0:
+                        fig2 = go.Figure()
+                        fig2.add_trace(go.Scatter(
+                            x=corr_data['marketing'],
+                            y=corr_data['revenue'],
+                            mode='markers',
+                            name='Observed',
+                            marker=dict(color='#636EFA', size=8)
+                        ))
+                        # Regression line
+                        x_range = np.linspace(corr_data['marketing'].min(), corr_data['marketing'].max(), 50)
+                        y_line = corr_result['slope'] * x_range + corr_result['intercept']
+                        fig2.add_trace(go.Scatter(
+                            x=x_range,
+                            y=y_line,
+                            mode='lines',
+                            name='Trend',
+                            line=dict(color='#EF553B', dash='dash')
+                        ))
+                        fig2.update_layout(
+                            title=f"Marketing Spend vs Revenue - {mkt_business}",
+                            xaxis_title="Marketing Spend ($)",
+                            yaxis_title="Revenue ($)",
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        st.plotly_chart(fig2, use_container_width=True)
+                        corr_val = corr_result['correlation']
+                        if corr_val > 0.5:
+                            corr_meaning = "Strong positive — spending more on marketing is clearly associated with higher revenue."
+                        elif corr_val > 0.2:
+                            corr_meaning = "Weak positive — there is some association, but other factors matter more."
+                        elif corr_val > -0.2:
+                            corr_meaning = "No meaningful relationship — marketing spend does not seem to affect revenue."
+                        elif corr_val > -0.5:
+                            corr_meaning = "Weak negative — surprisingly, more marketing correlates with less revenue (possibly due to timing or other factors)."
+                        else:
+                            corr_meaning = "Strong negative — more marketing is associated with less revenue. This is unusual and may indicate a data issue."
+
+                        st.markdown(
+                            "**How to read this chart:**<br>"
+                            "Each dot represents one day. "
+                            "The horizontal axis (X) shows how much you spent on marketing that day. "
+                            "The vertical axis (Y) shows how much revenue you earned. "
+                            "The **red dashed line** shows the overall trend.<br><br>"
+                            "**Key numbers explained:**<br>"
+                            f"- **Correlation: {corr_val:.3f}** — "
+                            f"Measures how closely marketing spend and revenue move together "
+                            f"(ranges from -1 to +1). {corr_meaning}<br>"
+                            f"- **ROI (slope): ${corr_result['slope']:.2f}** — "
+                            f"For every $1 you spend on marketing, your revenue changes by this amount. "
+                            f"{'This is a positive return.' if corr_result['slope'] > 1 else 'You are spending more than you earn back.' if corr_result['slope'] > 0 else 'Marketing is associated with lower revenue.'}<br>"
+                            f"- **Baseline: ${corr_result['intercept']:,.0f}** — "
+                            f"This is your estimated revenue if you spent $0 on marketing.",
                             unsafe_allow_html=True
                         )
+                    else:
+                        st.info("No marketing spend data to plot correlation.")
+
+                    # --- Section 3: Predict Impact ---
+                    st.divider()
+                    st.subheader("Revenue Predictor")
+                    budget_input = st.number_input(
+                        "Enter a marketing budget ($)",
+                        min_value=0.0, max_value=100000.0, value=500.0, step=100.0,
+                        key="mkt_budget_input"
+                    )
+                    predicted_revenue = mkt_analyzer.predict_impact(mkt_business, budget_input, 'revenue')
+                    baseline = corr_result['intercept']
+                    st.metric(
+                        "Predicted Revenue",
+                        f"${predicted_revenue:,.0f}",
+                        delta=f"${predicted_revenue - baseline:+,.0f} vs baseline"
+                    )
+                    st.markdown(
+                        "**How does this work?**<br>"
+                        "Based on your past data, we calculated a relationship between marketing spend and revenue. "
+                        f"Your **baseline revenue** (with $0 marketing) is estimated at **${baseline:,.0f}**. "
+                        f"The model predicts that spending **${budget_input:,.0f}** on marketing "
+                        f"would bring your revenue to **${predicted_revenue:,.0f}** "
+                        f"(a difference of **${predicted_revenue - baseline:+,.0f}**).<br><br>"
+                        "*Keep in mind: this is a simple linear estimate. "
+                        "Real results may vary, especially with limited data. "
+                        "The more game days you record, the more accurate this prediction becomes.*",
+                        unsafe_allow_html=True
+                    )
 else:
     # ========================================================================
     # MAIN DASHBOARD PAGE (your existing code)

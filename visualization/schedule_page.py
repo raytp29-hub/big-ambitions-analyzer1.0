@@ -757,40 +757,40 @@ def render_schedule_optimizer_page():
     render_operating_hours()
     st.divider()
     render_optimization()
-    
+
     # Show complete setup summary at bottom
-if ('business_setup' in st.session_state and 
-    st.session_state.business_setup and
-    'employees' in st.session_state and
-    st.session_state.employees and 
-    'weekly_schedule' in st.session_state and
-    st.session_state.weekly_schedule):
-    
-    # Business info
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**🏢 Business**")
-        st.write(f"Type: {st.session_state.business_setup.business_type}")
-        st.write(f"Building: {st.session_state.business_setup.code}")
-        st.write(f"Capacity: {st.session_state.business_setup.capacity_limit} customers/h")
-    
-    with col2:
-        st.markdown("**📅 Operating Hours**")
-        total_hours = sum(day.hours_open for day in st.session_state.weekly_schedule)
-        open_days = sum(1 for day in st.session_state.weekly_schedule if day.is_open)
-        st.write(f"Open Days: {open_days}/7")
-        st.write(f"Total Weekly Hours: {total_hours}h")
-    
-    # Employee list
-    st.markdown("**👥 Employees**")
-    st.write(f"Total: {len(st.session_state.employees)} employees")
-    
-    employee_summary = []
-    for emp in st.session_state.employees:
-        employee_summary.append(f"• **{emp.name}** - {emp.role} (${emp.hourly_wage:.2f}/h) - {len(emp.demands)} demands")
-    
-    for emp_text in employee_summary:
-        st.markdown(emp_text)
+    if ('business_setup' in st.session_state and
+        st.session_state.business_setup and
+        'employees' in st.session_state and
+        st.session_state.employees and
+        'weekly_schedule' in st.session_state and
+        st.session_state.weekly_schedule):
+
+        # Business info
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Business**")
+            st.write(f"Type: {st.session_state.business_setup.business_type}")
+            st.write(f"Building: {st.session_state.business_setup.code}")
+            st.write(f"Capacity: {st.session_state.business_setup.capacity_limit} customers/h")
+
+        with col2:
+            st.markdown("**Operating Hours**")
+            total_hours = sum(day.hours_open for day in st.session_state.weekly_schedule)
+            open_days = sum(1 for day in st.session_state.weekly_schedule if day.is_open)
+            st.write(f"Open Days: {open_days}/7")
+            st.write(f"Total Weekly Hours: {total_hours}h")
+
+        # Employee list
+        st.markdown("**Employees**")
+        st.write(f"Total: {len(st.session_state.employees)} employees")
+
+        employee_summary = []
+        for emp in st.session_state.employees:
+            employee_summary.append(f"- **{emp.name}** - {emp.role} (${emp.hourly_wage:.2f}/h) - {len(emp.demands)} demands")
+
+        for emp_text in employee_summary:
+            st.markdown(emp_text)
     
 
 

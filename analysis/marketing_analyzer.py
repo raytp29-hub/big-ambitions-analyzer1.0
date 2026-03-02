@@ -6,6 +6,7 @@ Analyzes the correlation between Marketing Spend and Revenue/Profit.
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
+from scipy import stats as scipy_stats
 from typing import Dict, Optional, Tuple
 
 from analysis.temporal_analyzer import TemporalAnalyzer
@@ -31,14 +32,12 @@ class MarketingAnalyzer:
         # Get raw aggregated data
         agg_df = analyzer.aggregate_by_period(granularity)
         
-        # Filter by business
+        # Filter by business (if not "All Businesses")
         if business_name != "All Businesses":
             agg_df = agg_df[agg_df['business'] == business_name]
-            # Group by period to get single row per period
-            data = agg_df.groupby('period')[['marketing', 'revenue', 'profit']].sum().reset_index()
-        else:
-             # Sum everything
-            data = agg_df.groupby('period')[['marketing', 'revenue', 'profit']].sum().reset_index()
+
+        # Group by period to get single row per period
+        data = agg_df.groupby('period')[['marketing', 'revenue', 'profit']].sum().reset_index()
             
         # We only care about periods where we spent SOMETHING on marketing?
         # Or even 0 marketing is a data point (baseline revenue).
@@ -114,32 +113,53 @@ class MarketingAnalyzer:
             (self.df['type'] == 'Marketing') &
             (self.df['description'].str.contains(business_name))
         ]
-        
-        
+
+
         marketing_days = set(marketing_df['day'].unique())
-        
+
         data = self.prepare_marketing_data(business_name, granularity)
         min_day = self.df['day'].min()
-        marketing_days_relative = set(d - min_day for d in marketing_days)
-        data['marketing_on'] = data['period'].isin(marketing_days_relative)
+
+        # Convert marketing days to the same period space as the aggregated data
+        from analysis.temporal_analyzer import PERIOD_DAYS
+        if granularity == 'daily':
+            marketing_periods = set(d - min_day for d in marketing_days)
+        else:
+            period_days = PERIOD_DAYS[granularity]
+            marketing_periods = set((d - min_day) // period_days for d in marketing_days)
+
+        data['marketing_on'] = data['period'].isin(marketing_periods)
         
         means = data.groupby('marketing_on')['revenue'].mean()
         if False not in means.index or True not in means.index:
             return {"error": "Not enough marketing ON/OFF days to compare"}
         mean_off = means[False]
         mean_on = means[True]
-        
+
         delta = mean_on - mean_off
-        delta_pct = (delta / mean_off) * 100
-        
+        delta_pct = (delta / mean_off) * 100 if mean_off != 0 else 0.0
+
+        # T-test: is the difference statistically significant?
+        revenue_on = data[data['marketing_on'] == True]['revenue'].values
+        revenue_off = data[data['marketing_on'] == False]['revenue'].values
+
+        if len(revenue_on) >= 2 and len(revenue_off) >= 2:
+            t_stat, p_value = scipy_stats.ttest_ind(revenue_on, revenue_off, equal_var=False)
+        else:
+            t_stat, p_value = 0.0, 1.0
+
         data['day'] = data['period'] + self.df['day'].min()
         return {
             "business": business_name,
             "mean_revenue_on": mean_on,
-            "mean_revenue_off":mean_off,
+            "mean_revenue_off": mean_off,
             "delta": delta,
             "delta_pct": delta_pct,
-            "data": data   
+            "t_stat": t_stat,
+            "p_value": p_value,
+            "n_on": len(revenue_on),
+            "n_off": len(revenue_off),
+            "data": data
         }
         
     def regression_with_time_control(self, business_name: str, granularity: str = 'daily') -> Dict:
@@ -147,7 +167,6 @@ class MarketingAnalyzer:
         dim_result = self.difference_in_means(business_name, granularity)
         if "error" in dim_result:
             return {"error": dim_result["error"]}
-        data = dim_result['data']
         data = dim_result['data']
         
         X = data[['marketing_on', 'day']].astype(float)
