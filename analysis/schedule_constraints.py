@@ -1,126 +1,142 @@
 """
 Schedule Constraints and Configuration
-Loads furniture data from CSV and defines employee demand options
+Loads game data from JSON via core.game_data module.
+All business types, buildings, furniture, and roles are derived from the game data.
 """
-import pandas as pd
+import sys
 from pathlib import Path
+import pandas as pd
 from typing import Dict, List
 
+# Ensure project root is in path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from core.game_data import (
+    get_business_categories,
+    get_businesses_for_category,
+    get_building_sizes_for_category,
+    get_building_capacity as _get_building_capacity,
+    get_furniture_for_business as _get_furniture_for_business,
+    get_employee_roles_for_business,
+    format_item_name,
+)
+
+
 # ============================================================================
-# LOAD FURNITURE DATA FROM CSV
+# BUSINESS CATEGORIES & TYPES (from game data)
 # ============================================================================
 
-def load_furniture_capacity() -> Dict[str, int]:
+def get_available_categories() -> List[str]:
+    """Get list of business categories: Cinema, Office, Retail, Theater, Warehouse"""
+    return get_business_categories()
+
+
+def get_business_tupes_for_category(category: str) -> List[str]:
     """
-    Load furniture customer capacity from scraped wiki data.
-    Returns dict: {furniture_name: customer_capacity}
+    Get business types for a category. Returns display names.
+    e.g., 'Retail' -> ['Bookstore', 'Clothing Store', 'Coffee Shop', ...]
     """
-    try:
-        # Try different possible paths
-        possible_paths = [
-            Path(__file__).parent.parent / 'data' / 'business_furniture_clean.csv',
-            Path('data/business_furniture_clean.csv'),
-            Path('../data/business_furniture_clean.csv')
-        ]
-        
-        df = None
-        for path in possible_paths:
-            if path.exists():
-                df = pd.read_csv(path)
-                break
-        
-        if df is None:
-            print("Warning: Could not find business_furniture_clean.csv")
-            return {}
-        
-        # Create dictionary: furniture_name -> customer_capacity
-        # For duplicates, take the max capacity
-        furniture_dict = {}
-        for _, row in df.iterrows():
-            appliance = str(row['appliance']).strip()
-            capacity = int(row['customer_capacity'])
-            
-            if appliance in furniture_dict:
-                furniture_dict[appliance] = max(furniture_dict[appliance], capacity)
-            else:
-                furniture_dict[appliance] = capacity
-        
-        return furniture_dict
-    
-    except Exception as e:
-        print(f"Error loading furniture CSV: {e}")
-        return {}
-
-
-# Load furniture capacity on module import
-FURNITURE_CAPACITY = load_furniture_capacity()
+    raw_names = get_businesses_for_category(category)
+    # Exclude Headquarters from the UI list
+    excluded = ['Headquarter']
+    return [format_item_name(name) for name in raw_names if name not in excluded]
 
 
 # ============================================================================
-# BUILDING DATA
+# BUILDING DATA (from game data)
 # ============================================================================
 
-BUILDING_DATA = {
-    'Retail': {
-        'A1': 15, 'A2': 15,
-        'C1': 30, 'C2': 30,
-        'D2': 40,
-        'M1': 75, 'M2': 75
-    },
-    'Office': {
-        'A3': 4,
-        'C1': 8, 'C2': 8,
-        'D2': 10,
-        'J1': 10,
-        'K1': 50
-    }
-}
+def get_available_buildings(business_category: str) -> List[str]:
+    """
+    Get list of available building codes for a category.
+    Returns codes like 'A1', 'A2', 'C1', 'S1', 'R3', etc.
+    """
+    sizes = get_building_sizes_for_category(business_category)
+    codes = []
+    for size in sizes:
+        for version in size['versions']:
+            codes.append(f"{size['letter']}{version['number']}")
+    return sorted(codes)
 
 
-def get_building_capacity(business_type: str, building_code: str) -> int:
-    """Get capacity limit for a specific building"""
-    return BUILDING_DATA.get(business_type, {}).get(building_code, 0)
-
-
-def get_available_buildings(business_type: str) -> List[str]:
-    """Get list of available building codes for a business type"""
-    return sorted(BUILDING_DATA.get(business_type, {}).keys())
+def get_building_capacity(business_category: str, building_code: str) -> int:
+    """
+    Get capacity limit for a specific building code.
+    e.g., get_building_capacity('Retail', 'A1') -> 15
+          get_building_capacity('Cinema', 'S2') -> 125
+    """
+    # Parse code: letter(s) + version number (last char)
+    letter = building_code[:-1]
+    version = int(building_code[-1])
+    return _get_building_capacity(business_category, letter, version)
 
 
 # ============================================================================
-# BUSINESS TYPES
+# FURNITURE (from game data)
 # ============================================================================
 
-BUSINESS_TYPES = ['Retail', 'Office']
+def get_furniture_for_business(business_type: str) -> pd.DataFrame:
+    """
+    Get available furniture for a business type.
+    Accepts display name ('Coffee Shop') or internal name ('CoffeeShop').
+    Returns DataFrame compatible with existing UI code.
+    """
+    # Convert display name to internal name (remove spaces)
+    internal_name = business_type.replace(' ', '')
+    furniture_list = _get_furniture_for_business(internal_name)
+
+    if not furniture_list:
+        return pd.DataFrame(columns=[
+            'furniture_name', 'customer_capacity', 'price', 'is_workstation'
+        ])
+
+    rows = []
+    for f in furniture_list:
+        rows.append({
+            'furniture_name': f['display_name'],
+            'customer_capacity': f['added_customers_per_hour'],
+            'price': f'${f["price"]:,.0f}',
+            'is_workstation': f['is_workstation'],
+            'item_name_internal': f['item_name'],
+        })
+
+    return pd.DataFrame(rows)
+
+
+def parse_price(price_str: str) -> float:
+    """Parse price string like '$1,400' to float"""
+    if pd.isna(price_str):
+        return 0.0
+    return float(str(price_str).replace('$', '').replace(',', ''))
 
 
 # ============================================================================
-# EMPLOYEE ROLES
+# EMPLOYEE ROLES (from game data)
 # ============================================================================
-
-EMPLOYEE_ROLES = {
-    'Retail': [
-        'Cleaning',
-        'Customer Service',
-        'DJ',
-        'Security Guard',
-        'Cashier'
-    ],
-    'Office': [
-        'Cleaning',
-        'Graphic Designer',
-        'HR Manager',
-        'Lawyer',
-        'Logistics Manager',
-        'Programmer',
-        'Purchasing Agent'
-    ]
-}
-
 
 def get_roles_for_business_type(business_type: str) -> List[str]:
-    """Get available employee roles for a business type"""
-    return EMPLOYEE_ROLES.get(business_type, [])
+    """
+    Get available employee roles for a business type.
+    Accepts display name ('Coffee Shop') or internal name ('CoffeeShop').
+    """
+    internal_name = business_type.replace(' ', '')
+    return get_employee_roles_for_business(internal_name)
+
+
+# ============================================================================
+# WORKSTATION CAPACITY
+# ============================================================================
+
+def calculate_workstation_capacity(selected_furniture: List[Dict], business_category: str) -> int:
+    """
+    Calculate max simultaneous employees based on workstations.
+    Uses is_workstation flag from game data instead of hardcoded name checks.
+    """
+    workstation_count = 0
+    for furn in selected_furniture:
+        if furn.get('is_workstation', False):
+            workstation_count += furn.get('quantity', 1)
+    return workstation_count if workstation_count > 0 else 1
 
 
 # ============================================================================
@@ -211,7 +227,7 @@ def get_all_demands_by_category() -> Dict[str, Dict[str, str]]:
         'schedule': SCHEDULE_DEMANDS,
         'benefits': BENEFITS_DEMANDS,
         'environment': ENVIRONMENT_DEMANDS,
-        'equipment': {item: item for item in EQUIPMENT_DEMANDS}  # equipment uses item name as key and display
+        'equipment': {item: item for item in EQUIPMENT_DEMANDS}
     }
 
 
@@ -236,79 +252,3 @@ DAYS_OF_WEEK = [
 
 DEFAULT_START_HOUR = 8
 DEFAULT_END_HOUR = 22
-
-
-
-def load_business_furniture_data():
-    """Load the complete business furniture CSV"""
-    csv_path = Path(__file__).parent / 'data' / 'business_furniture_complete.csv'
-    if not csv_path.exists():
-        csv_path = Path('data/business_furniture_complete.csv')
-        
-    return pd.read_csv(csv_path)
-
-
-def get_available_categories() -> List[str]:
-    """Get list of available business categories (Retail, Office)"""
-    df = load_business_furniture_data()
-    return sorted(df['category'].dropna().unique().tolist())
-
-
-def get_business_tupes_for_category(category:str) -> List[str]:
-    """Get business types for a specific category"""
-    df = load_business_furniture_data()
-    df_filtered = df[df['category'] == category]
-    
-    #Exclude Headquarters
-    excluded_business = ['Headquarters']
-    df_filtered = df_filtered[~df_filtered['business_type'].isin(excluded_business)]
-    
-    return sorted(df_filtered['business_type'].unique().tolist())
-
-
-def get_furniture_for_business(business_type: str) -> pd.DataFrame:
-    """Get available furniture for a specific business type"""
-    df = load_business_furniture_data()
-    df_filtered = df[df['business_type'] == business_type]
-    # Remove duplicates (same furniture might appear multiple times)
-    return df_filtered.drop_duplicates(subset=['furniture_name']).reset_index(drop=True)
-
-
-def parse_price(price_str: str) -> float:
-    """Parse price string like '$1,400' to float"""
-    if pd.isna(price_str):
-        return 0.0
-    return float(str(price_str).replace('$', '').replace(',', ''))
-
-
-
-def calculate_workstation_capacity(selected_furniture: List[Dict], business_category: str) -> int:
-    """
-    Calculate max simultaneous employees based on workstations.
-    
-    Args:
-        selected_furniture: List of furniture with quantities
-        business_category: 'Retail' or 'Office'
-    
-    Returns:
-        Max number of employees that can work simultaneously
-    """
-    
-    if business_category == 'Retail':
-        checkout_station = 0
-        
-        for furn in selected_furniture:
-            if furn['name'] in ['Cash Register', 'Checkout Counter']:
-                checkout_station += furn['quantity']
-        return checkout_station if checkout_station > 0 else 1
-    
-    elif business_category == 'Office':
-        workstation = 0
-        
-        for furn in selected_furniture:
-            if 'Office Workstation' in furn['name']:
-                workstation += furn['quantity']
-        return workstation if workstation > 0 else 1
-    
-    else:
-        return 1

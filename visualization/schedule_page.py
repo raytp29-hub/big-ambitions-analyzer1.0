@@ -13,7 +13,6 @@ from analysis.schedule_optimizer import optimize_schedule
 # Import models and constraints
 from analysis.schedule_models import Building, Employee, Demand, DailySchedule, BusinessSetup
 from analysis.schedule_constraints import (
-    BUSINESS_TYPES,
     calculate_workstation_capacity,
     get_available_buildings,
     get_available_categories,
@@ -162,7 +161,8 @@ def render_business_setup():
                 'quantity': qty,
                 'total_capacity': int(row['customer_capacity']) * qty,
                 'unit_price': row['price'],
-                'total_price': parse_price(row['price']) * qty
+                'total_price': parse_price(row['price']) * qty,
+                'is_workstation': row.get('is_workstation', False),
             })
 
     # SECTION 5: Capacity Analysis
@@ -212,7 +212,8 @@ def render_business_setup():
             building = Building(
                 business_type=business_category,
                 code=building_code,
-                capacity_limit=effective_capacity
+                capacity_limit=effective_capacity,
+                business_name=business_type,  # Display name e.g. 'Coffee Shop'
             )
             
             # Calculate max simultaneous employees
@@ -281,7 +282,9 @@ def render_employee_configuration():
             key="emp_wage"
         )
     
-    roles = get_roles_for_business_type(st.session_state.business_setup.business_type)
+    # Use the specific business name (e.g. 'Coffee Shop') for role lookup, not the category
+    business_name = getattr(st.session_state.business_setup, 'business_name', '') or st.session_state.get('selected_business_type', '')
+    roles = get_roles_for_business_type(business_name)
     role = st.selectbox(
         "Role",
         options=roles,

@@ -12,10 +12,11 @@ from typing import Literal, List, Dict
 @dataclass
 class Building:
     """Represents a business building with capacity limit"""
-    business_type: str  # 'Retail', 'Office', 'Warehouse'
-    code: str           # 'M1', 'K1', 'A1', etc.
-    capacity_limit: int # Maximum customers per hour
-    
+    business_type: str      # 'Retail', 'Office', 'Warehouse', 'Cinema', 'Theater'
+    code: str               # 'M1', 'K1', 'A1', 'S2', 'R3', etc.
+    capacity_limit: int     # Maximum customers per hour
+    business_name: str = "" # e.g., 'CoffeeShop', 'Cinema' (optional, for traceability)
+
     def __str__(self):
         return f"{self.code} ({self.business_type}) - Max {self.capacity_limit} customers/hour"
 
