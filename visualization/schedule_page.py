@@ -112,31 +112,36 @@ def render_business_setup():
     # Store selections with quantities
     selected_furniture = []
     
-    h1, h2, h3, h4 = st.columns([3,1,1,1])
-    
+    h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
+
     with h1:
-        st.markdown("Furniture")
+        st.markdown("**Furniture**")
     with h2:
-        st.markdown("Costumer Capacity")
+        st.markdown("**Cust. Cap.**")
     with h3:
-        st.markdown("Quantity")
+        st.markdown("**Unit Price**")
     with h4:
-        st.markdown("Total Quantity")
+        st.markdown("**Qty**")
+    with h5:
+        st.markdown("**Total Price**")
 
     for idx, row in df_furniture.iterrows():
-        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-        
+        col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
+
         with col1:
             is_selected = st.checkbox(
                 row['furniture_name'],
                 key=f"furniture_check_{idx}"
             )
-        
+
         with col2:
             st.caption(f"📊 {row['customer_capacity']}")
-        
+
         with col3:
-            # Quantity selector (only active if selected)
+            unit_price = parse_price(row['price'])
+            st.caption(f"${unit_price:,.0f}")
+
+        with col4:
             qty = st.number_input(
                 "Qty",
                 min_value=1,
@@ -146,11 +151,11 @@ def render_business_setup():
                 key=f"furniture_qty_{idx}",
                 label_visibility="collapsed"
             )
-        
-        with col4:
+
+        with col5:
             if is_selected:
-                total_cap = int(row['customer_capacity']) * qty
-                st.caption(f"→ {total_cap}")
+                total_price_item = parse_price(row['price']) * qty
+                st.caption(f"${total_price_item:,.0f}")
             else:
                 st.caption("—")
         

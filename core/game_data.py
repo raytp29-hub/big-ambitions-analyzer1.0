@@ -159,6 +159,11 @@ def _display_to_internal(display_name: str) -> str:
     return display_name.replace(' ', '')
 
 
+def display_to_internal(display_name: str) -> str:
+    """Public wrapper: convert display name to internal CamelCase name."""
+    return _display_to_internal(display_name)
+
+
 def _make_furniture_dict(item: dict) -> dict:
     """Convert a raw item dict into the furniture API format."""
     showcase_products = []
@@ -459,3 +464,147 @@ def get_all_business_types() -> List[dict]:
 def get_all_items() -> List[dict]:
     """Get all item definitions (raw data)."""
     return _game_data['items']
+
+
+# ============================================================================
+# PUBLIC API - DEMAND ANALYSIS
+# ============================================================================
+
+_DAY_NAMES = {1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun'}
+
+
+def get_demand_multipliers(business_name: str) -> Optional[dict]:
+    """
+    Return hourly and daily demand multipliers for a business.
+
+    Returns:
+        {
+            'hourly': [{'start': 0, 'end': 8, 'multiplier': 0.01}, ...],
+            'daily': [{'day': 1, 'name': 'Mon', 'multiplier': 1.0}, ...]
+        }
+        or None if business not found.
+    """
+    bt = _get_business_type(business_name)
+    if bt is None:
+        return None
+
+    hourly = []
+    for h in bt.get('hourlyFactorMultipliers', []):
+        hourly.append({
+            'start': h['startingHour'],
+            'end': h['endingHour'],
+            'multiplier': round(h['multiplier'], 4),
+        })
+
+    daily = []
+    for d in bt.get('dayFactorMultipliers', []):
+        day_num = d['dayOfWeekOrdered']
+        daily.append({
+            'day': day_num,
+            'name': _DAY_NAMES.get(day_num, f'Day{day_num}'),
+            'multiplier': round(d['multiplier'], 4),
+        })
+
+    return {'hourly': hourly, 'daily': sorted(daily, key=lambda x: x['day'])}
+
+
+def get_all_products_with_margins() -> List[dict]:
+    """
+    Return all sellable products with margin analysis.
+    Includes which businesses sell each product and the impact value.
+    """
+    # Build product -> business mapping
+    product_businesses: Dict[int, List[dict]] = {}
+    for bt in _game_data['business_types']:
+        if bt.get('allowPlayerCreation') != 1:
+            continue
+        btype_id = bt['suitableBuildingType']
+        if btype_id not in PLAYER_BUILDING_TYPES:
+            continue
+        for prod in bt.get('businessProducts', []):
+            pid = prod['itemName']
+            if pid not in product_businesses:
+                product_businesses[pid] = []
+            product_businesses[pid].append({
+                'business': format_item_name(bt['m_Name']),
+                'impact': round(prod.get('impact', 1.0), 2),
+            })
+
+    results = []
+    for pid, businesses in product_businesses.items():
+        item = _items_by_id.get(pid)
+        if item is None:
+            continue
+        wholesale = item.get('wholesalePrice', 0.0)
+        market = item.get('defaultMarketPrice', 0.0)
+        margin = market - wholesale
+        margin_pct = (margin / wholesale * 100) if wholesale > 0 else 0.0
+
+        results.append({
+            'name': format_item_name(item['m_Name']),
+            'internal_name': item['m_Name'],
+            'wholesale': round(wholesale, 2),
+            'market': round(market, 2),
+            'margin': round(margin, 2),
+            'margin_pct': round(margin_pct, 1),
+            'sales_ratio': round(item.get('productSalesRatio', 0.0), 2),
+            'businesses': businesses,
+            'n_businesses': len(businesses),
+        })
+
+    return sorted(results, key=lambda x: -x['margin'])
+
+
+def get_business_comparison_data() -> List[dict]:
+    """
+    Return summary data for all player-creatable businesses for comparison.
+    """
+    results = []
+    for bt in _game_data['business_types']:
+        if bt.get('allowPlayerCreation') != 1:
+            continue
+        btype_id = bt['suitableBuildingType']
+        if btype_id not in PLAYER_BUILDING_TYPES:
+            continue
+
+        name = bt['m_Name']
+        category = PLAYER_BUILDING_TYPES[btype_id]
+
+        # Products
+        products = get_products_for_business(name)
+        margins = [p['market'] - p['wholesale'] for p in products]
+        avg_margin = sum(margins) / len(margins) if margins else 0
+
+        # Furniture
+        furniture = get_furniture_for_business(name)
+
+        # Skills
+        roles = get_employee_roles_for_business(name)
+
+        # Neighbourhood limits
+        neigh_limits = set()
+        for prod in bt.get('businessProducts', []):
+            item = _items_by_id.get(prod['itemName'])
+            if item and item.get('limitDemandToNeighbourhoods'):
+                neigh_limits.update(item['limitDemandToNeighbourhoods'])
+
+        # Demand multipliers summary
+        daily_mults = [d['multiplier'] for d in bt.get('dayFactorMultipliers', [])]
+        avg_daily = sum(daily_mults) / len(daily_mults) if daily_mults else 0
+
+        results.append({
+            'name': format_item_name(name),
+            'internal_name': name,
+            'category': category,
+            'n_products': len(products),
+            'avg_margin': round(avg_margin, 2),
+            'n_furniture': len(furniture),
+            'roles': roles,
+            'n_roles': len(roles),
+            'neighbourhood_limits': sorted(neigh_limits) if neigh_limits else None,
+            'avg_daily_demand': round(avg_daily, 2),
+            'has_entrance_fee': bt.get('hasEntranceFee', 0) == 1,
+            'entrance_fee': bt.get('defaultEntranceFee', 0),
+        })
+
+    return sorted(results, key=lambda x: (x['category'], x['name']))
