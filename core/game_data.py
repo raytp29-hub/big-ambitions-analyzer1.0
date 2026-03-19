@@ -371,18 +371,69 @@ def get_furniture_for_business(business_name: str) -> List[dict]:
                 seen.add(item['m_Name'])
                 furniture.append(_make_furniture_dict(item))
 
+    # Mechanism 4: Secondary showcase furniture via tag system.
+    # Furniture items have tags that indicate which businesses they can be placed in.
+    # The tag value matches the business's businessTypeName.
+    # For businesses without tag coverage (newer ones), fall back to same building type.
+    my_tag = bt.get('businessTypeName')
+    primary_product_ids = set(p['itemName'] for p in bt.get('businessProducts', []))
+
+    # Check if this business has any tag coverage on furniture
+    has_tag_coverage = any(
+        my_tag in item.get('tags', [])
+        for item in _game_data['items']
+        if item.get('isFurniture', 0) == 1 and item.get('itemsThatCanShowcase')
+    )
+
+    for item in _game_data['items']:
+        if (item.get('isFurniture', 0) == 1 and
+                item.get('addedCustomersPerHour', 0) > 0 and
+                item.get('itemsThatCanShowcase') and
+                item['m_Name'] not in seen):
+
+            # Filter: must have this business's tag (or fall back for no-tag businesses)
+            if has_tag_coverage:
+                if my_tag not in item.get('tags', []):
+                    continue
+            else:
+                # Fallback: same building type — find sibling product IDs
+                my_building_type = bt.get('suitableBuildingType')
+                sibling_ids = set()
+                for other_bt in _game_data['business_types']:
+                    if (other_bt.get('suitableBuildingType') == my_building_type and
+                            other_bt['m_Name'] != business_name):
+                        for p in other_bt.get('businessProducts', []):
+                            sibling_ids.add(p['itemName'])
+                showcase_ids = set(item['itemsThatCanShowcase'])
+                if not (showcase_ids & (sibling_ids | primary_product_ids)):
+                    continue
+
+            # Only add as secondary if it showcases non-primary products
+            showcase_ids = set(item['itemsThatCanShowcase'])
+            if showcase_ids.issubset(primary_product_ids):
+                continue  # already covered by primary mechanisms
+
+            seen.add(item['m_Name'])
+            fdict = _make_furniture_dict(item)
+            secondary_products = []
+            for pid in item['itemsThatCanShowcase']:
+                prod_item = _items_by_id.get(pid)
+                if prod_item:
+                    secondary_products.append(prod_item['m_Name'])
+            fdict['secondary_products'] = secondary_products
+            furniture.append(fdict)
+
     # Always include CleaningStation
     cleaning = _items_by_name.get('CleaningStation')
     if cleaning and cleaning['m_Name'] not in seen:
         seen.add(cleaning['m_Name'])
         furniture.append(_make_furniture_dict(cleaning))
 
-    # Sort: workstations first, then by customers/hour descending, then by name
-    furniture.sort(key=lambda x: (
-        not x['is_workstation'],
-        -x['added_customers_per_hour'],
-        x['display_name']
-    ))
+    # Sort: workstations first, then primary furniture, then secondary, then by name
+    def _sort_key(x):
+        is_secondary = bool(x.get('secondary_products'))
+        return (not x['is_workstation'], is_secondary, -x['added_customers_per_hour'], x['display_name'])
+    furniture.sort(key=_sort_key)
 
     return furniture
 
