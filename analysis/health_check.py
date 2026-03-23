@@ -14,6 +14,20 @@ from analysis.revenue_analyzer import extract_business_name_from_string
 
 
 
+
+
+
+
+
+MANDATORY_FURNITURE = [
+    {"name": "Toilet",              "internal": "Toilet",              "price": 380},
+    {"name": "Cleaning Station",    "internal": "CleaningStation",     "price": 100},
+    {"name": "Cash Register",       "internal": "CashRegister",       "price": 900},
+    {"name": "Security Guard Locker","internal": "SecurityGuardLocker","price": 2000},
+]
+
+
+
 @dataclass 
 class ProductScore:
     name:str
@@ -111,7 +125,24 @@ def rank_zone(biz_name:str) -> List[ZoneInfo]:
         
     return sorted(result, key= lambda x:x.avg_traffic, reverse=True)
     
+   
+def compute_recommended_hours(biz_name: str, threshold: float = 0.3) -> tuple[int, int]:
+    """Recommended open/close hours based on heatmap values >= threshold."""
+    demand = get_demand_multipliers(biz_name)
+    hourly = demand['hourly']
+    daily = demand['daily']
+    avg_daily = sum(d['multiplier'] for d in daily) / len(daily)
     
+    good_hours = []
+    for h in hourly:
+        for hour in range(h['start'], h['end']):
+            if h['multiplier'] * avg_daily >= threshold:
+                good_hours.append(hour)
+    
+    if not good_hours:
+        return 8, 22
+    return min(good_hours), max(good_hours) + 1
+
     
 @dataclass
 class MiniFurniture:
@@ -202,6 +233,23 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
                 is_workstation= True
             ))
         
+    
+    
+        # --- Mandatory furniture ---
+    existing_names = {f.name for f in furniture_list}
+    for mf in MANDATORY_FURNITURE:
+        if mf["name"] not in existing_names:
+            furniture_list.append(MiniFurniture(
+                name=mf["name"],
+                quantity=1,
+                price=mf["price"],
+                capacity=0,
+                is_workstation=False
+            ))
+
+    
+    
+    
         
     n_employees = sum(f.quantity for f in furniture_list if f.is_workstation)
     if n_employees == 0:
@@ -365,3 +413,154 @@ def compute_performance(df, business_name:str, bep: BepResult, hourly_wage: floa
         n_days=n_days,
         daily_data=daily_data
     )
+
+
+
+# =====================================
+# ACTION REPORT
+# =====================================
+
+@dataclass
+class ReportItem:
+    icon: str          # emoji
+    priority: int      # 1 = highest
+    title: str
+    detail: str
+
+
+def generate_report(perf: PerformanceResult, bep: BepResult, recommended_hours: tuple[int, int] = None) -> List[ReportItem]:
+
+    """
+    Generate an action-plan report based on performance vs theoretical.
+    Returns a list of ReportItem sorted by priority (1 = most urgent).
+    """
+    items = []
+
+    rev_pct = perf.performance_pct        # actual_rev / theo_rev * 100
+    wage_pct = perf.performance_wage      # actual_wage / theo_wage * 100
+    gap = wage_pct - rev_pct              # positive = wages growing faster than revenue
+
+    daily_profit = perf.actual_revenue - perf.actual_wages
+    payback = bep.setup_cost / daily_profit if daily_profit > 0 else float('inf')
+
+    # DOPO
+    if recommended_hours:
+        rec_open, rec_close = recommended_hours
+    else:
+        rec_open, rec_close = bep.open_hour, bep.close_hour
+    optimal_hours = f"{rec_open:02d}:00 - {rec_close:02d}:00"
+
+
+    # --- 1. Wage/Revenue gap analysis ---
+    if gap > 25:
+        wage_excess = perf.actual_wages - perf.theo_wages
+        items.append(ReportItem(
+            icon="🔴",
+            priority=1,
+            title="Wages disproportionate to revenue",
+            detail=(
+                f"You're spending {wage_pct:.0f}% of theoretical wages "
+                f"but earning only {rev_pct:.0f}% of theoretical revenue. "
+                f"That's ~${wage_excess:,.0f}/day overspent. "
+                f"Review your employee scheduling — optimal hours for this business are {optimal_hours}."
+            )
+        ))
+    elif gap > 10:
+        items.append(ReportItem(
+            icon="🟡",
+            priority=2,
+            title="Wages slightly above revenue ratio",
+            detail=(
+                f"Wages are at {wage_pct:.0f}% vs revenue at {rev_pct:.0f}% of theoretical. "
+                f"Consider tightening your schedule to {optimal_hours} to cut unnecessary labor costs."
+            )
+        ))
+    else:
+        items.append(ReportItem(
+            icon="✅",
+            priority=5,
+            title="Wages in line with revenue",
+            detail=(
+                f"Your wage spend ({wage_pct:.0f}%) is proportional to your revenue ({rev_pct:.0f}%). "
+                f"No scheduling changes needed."
+            )
+        ))
+
+    # --- 2. Revenue performance ---
+    if rev_pct >= 85:
+        items.append(ReportItem(
+            icon="✅",
+            priority=5,
+            title="Revenue is strong",
+            detail=f"You're earning {rev_pct:.0f}% of the theoretical maximum. Great performance."
+        ))
+    elif rev_pct >= 50:
+        items.append(ReportItem(
+            icon="🟡",
+            priority=3,
+            title="Revenue below potential",
+            detail=(
+                f"You're earning {rev_pct:.0f}% of the theoretical maximum. "
+                f"This could be caused by insufficient furniture, a low-traffic location, "
+                f"or operating outside peak demand hours ({optimal_hours})."
+            )
+        ))
+    else:
+        items.append(ReportItem(
+            icon="🔴",
+            priority=1,
+            title="Revenue critically low",
+            detail=(
+                f"You're only earning {rev_pct:.0f}% of theoretical revenue. "
+                f"Check that you have enough furniture to serve customers, "
+                f"and consider relocating to a higher-traffic zone."
+            )
+        ))
+
+    # --- 3. Profitability / Break-even ---
+    if daily_profit <= 0:
+        items.append(ReportItem(
+            icon="🔴",
+            priority=1,
+            title="Business is operating at a loss",
+            detail=(
+                f"Daily profit: -${abs(daily_profit):,.0f}. "
+                f"Revenue (${perf.actual_revenue:,.0f}) does not cover wages (${perf.actual_wages:,.0f}). "
+                f"Immediate action required: reduce staff hours or improve revenue."
+            )
+        ))
+    elif payback > 60:
+        items.append(ReportItem(
+            icon="🟡",
+            priority=3,
+            title="Slow payback on investment",
+            detail=(
+                f"At current pace (${daily_profit:,.0f}/day profit), "
+                f"it will take ~{payback:.0f} days to recover the ${bep.setup_cost:,.0f} setup cost."
+            )
+        ))
+    else:
+        items.append(ReportItem(
+            icon="✅",
+            priority=5,
+            title="Healthy payback timeline",
+            detail=(
+                f"Daily profit: ${daily_profit:,.0f}. "
+                f"Setup cost (${bep.setup_cost:,.0f}) recovered in ~{payback:.0f} days."
+            )
+        ))
+
+    # --- 4. Scheduling suggestion (always show optimal hours) ---
+    items.append(ReportItem(
+        icon="🕐",
+        priority=4,
+        title="Recommended schedule",
+        detail=(
+            f"Based on the demand curve for this business type, "
+            f"the most profitable operating hours are {optimal_hours} "
+            f"with {bep.employees} employee(s). "
+            f"Theoretical daily wages at optimal schedule: ${perf.theo_wages:,.0f}."
+        )
+    ))
+
+    return sorted(items, key=lambda x: x.priority)

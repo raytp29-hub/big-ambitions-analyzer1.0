@@ -5,7 +5,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-from analysis.health_check import NEIGHBOURHOOD_NAMES, compute_bep, compute_performance, rank_products, rank_zone
+from analysis.health_check import (
+    NEIGHBOURHOOD_NAMES, compute_bep, compute_performance, 
+    generate_report, rank_products, rank_zone, compute_recommended_hours
+)
+
 from analysis.schedule_constraints import get_available_buildings, get_available_categories, get_building_capacity, get_business_tupes_for_category
 from core.game_data import get_demand_multipliers
 from analysis.revenue_analyzer import extract_business_from_revenue
@@ -51,6 +55,9 @@ def render_health_check_page():
     st.dataframe(pd.DataFrame(rows))
     
     
+    st.caption("Score = Margin × Probability. Higher score = more profitable product to stock.")
+
+    
     st.header("Where to Open - Zone Ranking")
     zone_rows = []
     
@@ -64,8 +71,11 @@ def render_health_check_page():
             "Product Match": f"{z.product_match:.0%}"
         })
         
-    st.dataframe(pd.DataFrame(zone_rows))
+    st.dataframe(pd.DataFrame(zone_rows), hide_index= True)
     
+    
+    st.caption("Zones ranked by average foot traffic. More traffic = more potential customers.")
+
     
     
     # SECTION 2
@@ -120,8 +130,9 @@ def render_health_check_page():
         
     
         st.dataframe(pd.DataFrame(furniture_rows), hide_index= True)
-        
-        
+
+        st.caption("Minimum furniture needed to reach building capacity. Includes mandatory items (toilet, cleaning station, cash register, security locker).")
+
         col5, col6, col7 = st.columns(3)
         with col5:
             st.metric("Setup Cost", f"${result.setup_cost:,.2f}")
@@ -129,8 +140,9 @@ def render_health_check_page():
             st.metric("Employees Needed", result.employees)
         with col7:
             st.metric("Break Even", f"{result.break_even:.0f} days")
-            
-    
+
+        st.caption("Estimated daily figures based on optimal furniture, location traffic, and demand curve. Break Even = days to recover the setup cost.")
+
         demand = get_demand_multipliers(internal_name)
         
         hourly_24 = [0.0] * 24
@@ -150,6 +162,8 @@ def render_health_check_page():
         st.plotly_chart(fig, use_container_width=True)
         
         
+        st.caption("Brighter = higher demand. Use this to set your opening hours.")
+
         
     # SECTION 4 THEO VS EFFECTIVE
     
@@ -185,20 +199,22 @@ def render_health_check_page():
                 yaxis=dict(range=[0, max(perf.daily_data['revenue'].max(), perf.theo_revenue) * 1.1])
             )
             st.plotly_chart(fig, use_container_width=True)
-            
+
+            st.caption("Blue line = your actual daily revenue from CSV. Red dashed line = theoretical maximum based on BEP analysis. Closer to red = better.")
+
             col1, col2, col3, col4 = st.columns(4)
-            
+
             with col1:
-                st.metric("Performance", f"{perf.performance_pct:0f}%")
+                st.metric("Performance", f"{perf.performance_pct:.2f}%")
             with col2:
                 st.metric("Rating", perf.rating)
             with col3:
                 st.metric("Avg Daily Revenue", f"${perf.actual_revenue:,.0f}")
             with col4:
                 st.metric("Days Analyzed", perf.n_days)
-                
-                
-                
+
+            st.caption("Performance = actual revenue as % of theoretical. Rating: Excellent (85%+), Good (65%+), Below Average (40%+), Poor (<40%).")
+
             fig_wages = go.Figure()
 
             fig_wages.add_trace(go.Scatter(
@@ -219,14 +235,27 @@ def render_health_check_page():
             st.plotly_chart(fig_wages, use_container_width=True)
             
             
+            st.caption("Compare your actual wage spend vs the theoretical minimum based on optimal staffing.")
+
+            
             col5, col6 = st.columns(2)
             wage_diff = perf.actual_wages - perf.theo_wages
             with col5:
                 st.metric("Actual Daily Wages", f"${perf.actual_wages:,.0f}")
             with col6:
-                st.metric("Theoretical Daily Wages", f"${perf.theo_wages:,.0f}", 
+                st.metric("Theoretical Daily Wages", f"${perf.theo_wages:,.0f}",
                         delta=f"${wage_diff:+,.0f}", delta_color="inverse")
 
-                
+            rec_hours = compute_recommended_hours(internal_name)
+            report = generate_report(perf, result, recommended_hours=rec_hours)
+
+            # --- ACTION REPORT ---
+            st.header("Action Report")
+
+            for item in report:
+                with st.expander(f"{item.icon} {item.title}", expanded=(item.priority <= 2)):
+                    st.write(item.detail)
+
+
     else:
         st.info("Upload your CSV in the sidebar to compare actual vs theoretical performance")
