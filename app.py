@@ -104,7 +104,7 @@ with st.sidebar:
     business data with professional insights.
     
     **Version:** 2.0.0  
-    **Updated:** February 2026
+    **Updated:** March 2026
     """)
     
 
