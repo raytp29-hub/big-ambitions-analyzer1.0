@@ -15,6 +15,8 @@ import plotly.express as px
 
 # Import Schedule Optimizer page
 from visualization.schedule_page import render_schedule_optimizer_page
+from visualization.game_data_page import render_game_data_explorer
+from visualization.health_check_page import render_health_check_page
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
@@ -45,7 +47,7 @@ with st.sidebar:
     # PAGE SELECTOR
     page = st.selectbox(
         "📍 Navigation",
-        ["📊 Main Dashboard", "🗓️ Schedule Optimizer", "📈 Forecasting"],
+        ["📊 Main Dashboard", "🗓️ Schedule Optimizer", "📈 Forecasting", "🎮 Game Data Explorer", "🏥 Business Health Check"],
         help="Choose which tool to use"
     )
     
@@ -92,8 +94,10 @@ with st.sidebar:
     ### Status
     🟢 **Data Cleaner**: Ready  
     🟢 **Analytics**: Ready
-    🟢 **Schedule Optimizer**: Ready ✨  
-    � **Forecasting**: Ready 🚀
+    🟢 **Schedule Optimizer**: Ready ✨
+    🟢 **Forecasting**: Ready 🚀
+    🟢 **Game Data Explorer**: Ready 🎮
+    🟢 **Health Check**: Ready 🏥
     
     ### About
     This tool helps you analyze your Big Ambitions
@@ -123,6 +127,12 @@ if page == "🗓️ Schedule Optimizer":
     # SCHEDULE OPTIMIZER PAGE
     # ========================================================================
     render_schedule_optimizer_page()
+
+elif page == "🎮 Game Data Explorer":
+    render_game_data_explorer()
+
+elif page == "🏥 Business Health Check":
+    render_health_check_page()
 
 elif page == "📈 Forecasting":
     # ========================================================================

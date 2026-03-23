@@ -35,7 +35,7 @@ class TemporalAnalyzer:
         elif self.total_days <= 365:
             return "monthly"
         else:
-            return "quaterly"
+            return "quarterly"
         
         
         
