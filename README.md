@@ -109,7 +109,7 @@ streamlit run app.py
 
 ### Capacity Analysis
 ![Capacity Analysis](screenshots/14.png)
-*Analize your costumer capacity according to your furniture*
+*Analyze your customer capacity according to your furniture*
 
 ### Employee Details
 ![Employee Details](screenshots/16.png)
@@ -130,6 +130,18 @@ streamlit run app.py
 ### Business Health Check
 ![Schedule Optimizer](screenshots/hc.png)
 *Business health check*
+
+### Business Health Check
+![Schedule Optimizer](screenshots/hc2.png)
+*Business health check details*
+
+### Business Health Check - Heatmap
+![Schedule Optimizer](screenshots/hc4.png)
+*Business health check heatmap*
+
+### Business Health Check - Performance
+![Schedule Optimizer](screenshots/hc5.png)
+*Business health check performance*
 
 ---
 
