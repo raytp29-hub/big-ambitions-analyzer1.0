@@ -127,7 +127,9 @@ streamlit run app.py
 ![Schedule Optimizer](screenshots/25.png)
 *Final schedule result*
 
-
+### Business Health Check
+![Schedule Optimizer](screenshots/hc.png)
+*Business health check*
 
 ---
 
