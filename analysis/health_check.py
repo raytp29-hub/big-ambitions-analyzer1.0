@@ -6,6 +6,7 @@ from typing import List
 from collections import defaultdict
 
 import pandas as pd
+import streamlit as st
 
 from core import game_data
 from core.game_data import get_demand_multipliers, get_furniture_for_business, get_products_for_business, get_item_by_name, get_all_business_types, _game_data
@@ -42,6 +43,7 @@ class ProductScore:
     
     
     
+@st.cache_data(show_spinner=False)
 def rank_products(biz_name: str) -> List[ProductScore]:
     products = get_products_for_business(biz_name)
     result = []
@@ -94,6 +96,7 @@ class ZoneInfo:
     product_match: float
     
     
+@st.cache_data(show_spinner=False)
 def rank_zone(biz_name:str) -> List[ZoneInfo]:
     business_types = get_all_business_types()
     bt = next((b for b in business_types if b["m_Name"] == biz_name), None)
@@ -126,6 +129,7 @@ def rank_zone(biz_name:str) -> List[ZoneInfo]:
     return sorted(result, key= lambda x:x.avg_traffic, reverse=True)
     
    
+@st.cache_data(show_spinner=False)
 def compute_recommended_hours(biz_name: str, threshold: float = 0.3) -> tuple[int, int]:
     """Recommended open/close hours based on heatmap values >= threshold."""
     demand = get_demand_multipliers(biz_name)
@@ -167,6 +171,7 @@ class BepResult:
     close_hour: int
     
     
+@st.cache_data(show_spinner=False)
 def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float, hourly_wage= 22.0):
     products = rank_products(biz_name)
     
