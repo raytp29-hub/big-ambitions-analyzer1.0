@@ -158,7 +158,15 @@ def render_health_check_page():
                 matrix[day_idx][hour] = round(d['multiplier'] * hourly_24[hour], 3)
 
         fig = px.imshow(matrix, x=[f"{h:02d}:00" for h in range(24)], y=day_order,
-                        color_continuous_scale='YlOrRd', title="Demand Heatmap")
+                        color_continuous_scale='YlOrRd', title=f"Demand Heatmap - Business Type: {busi_type}",)
+        fig.update_layout(
+            coloraxis_colorbar=dict(
+                title="Demand"
+            )
+        )
+
+
+
         st.plotly_chart(fig, use_container_width=True)
         
         
@@ -196,7 +204,8 @@ def render_health_check_page():
                 line=dict(dash='dash', color='red')
             ))
             fig.update_layout(
-                yaxis=dict(range=[0, max(perf.daily_data['revenue'].max(), perf.theo_revenue) * 1.1])
+                yaxis=dict(range=[0, max(perf.daily_data['revenue'].max(), perf.theo_revenue) * 1.1]),
+                title= "Daily Revenue: Actual vs Theoretical"
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -231,6 +240,10 @@ def render_health_check_page():
                 name=f'Theoretical: ${perf.theo_wages:,.0f}',
                 line=dict(dash='dash', color='red')
             ))
+            
+            fig_wages.update_layout(
+                title= "Daily Wages: Actual vs Theoretical"
+            )
 
             st.plotly_chart(fig_wages, use_container_width=True)
             
