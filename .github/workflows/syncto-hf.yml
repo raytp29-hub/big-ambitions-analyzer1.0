@@ -16,10 +16,10 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           git clone https://raytp29:$HF_TOKEN@huggingface.co/spaces/raytp29/big-ambitions-analyzer hf-repo
-          rsync -av --exclude='screenshots' --exclude='tests' --exclude='test_*.py' --exclude='app_old.py' --exclude='app_updated.py' --exclude='setup_project.py' --exclude='.github' --exclude='.git' --exclude='hf-repo' ./ hf-repo/
+          rsync -av --exclude='screenshots' --exclude='tests' --exclude='test_*.py' --exclude='app_old.py' --exclude='app_updated.py' --exclude='setup_project.py' --exclude='.github' --exclude='.git' --exclude='hf-repo' ./ hf-repo/ --exclude='README.md'
           cd hf-repo
           git config user.email "raytp29@users.noreply.github.com"
           git config user.name "raytp29-hub"
           git add .
           git diff --staged --quiet || (git commit -m "Sync from GitHub" && git push)
-          --exclude='README.md'
+          
