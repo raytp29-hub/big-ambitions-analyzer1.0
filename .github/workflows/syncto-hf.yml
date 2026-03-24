@@ -15,5 +15,8 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git remote add hf https://raytp29:$HF_TOKEN@huggingface.co/spaces/raytp29/big-ambitions-analyzer
-          git push hf main --force
+          git clone https://raytp29:$HF_TOKEN@huggingface.co/spaces/raytp29/big-ambitions-analyzer hf-repo
+          rsync -av --exclude='screenshots' --exclude='tests' --exclude='test_*.py' --exclude='app_old.py' --exclude='app_updated.py' --exclude='setup_project.py' --exclude='.github' ./ hf-repo/
+          cd hf-repo
+          git add .
+          git diff --staged --quiet || (git commit -m "Sync from GitHub" && git push)
