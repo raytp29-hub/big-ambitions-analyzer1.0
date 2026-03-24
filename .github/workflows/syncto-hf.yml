@@ -22,3 +22,4 @@ jobs:
           git config user.name "raytp29-hub"
           git add .
           git diff --staged --quiet || (git commit -m "Sync from GitHub" && git push)
+          --exclude='README.md'
