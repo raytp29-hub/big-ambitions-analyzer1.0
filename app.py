@@ -452,7 +452,9 @@ else:
         - 📊 Revenue analysis per business
         - 💰 Profit & Loss statements
         - 📈 Trend analysis and forecasting
-        - 🗓️ **NEW:** Employee Schedule Optimizer
+        - 🧮 Employee Schedule Optimizer
+        - 🏥 **NEW:** Business Health Check (BEP, zone ranking, demand heatmap)
+        - 📖 **NEW:** Game Data Explorer
         """)
         
         st.divider()
