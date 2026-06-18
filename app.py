@@ -449,6 +449,7 @@ else:
         2. **Upload** the file using the sidebar uploader
         3. **Explore** the dashboard and navigate to other modules from the sidebar
         """)
+        st.caption("💡 Tip: set the game language to **English** before exporting. Files in any language now load, but Profit & Loss categorization relies on English transaction-type names.")
 
         st.divider()
 

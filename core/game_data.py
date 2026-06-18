@@ -13,50 +13,62 @@ from typing import Dict, List, Optional
 # CONSTANTS (from game's enum definitions - stable across updates)
 # ============================================================================
 
-SKILL_NAMES: Dict[int, str] = {
-    0: "Customer Service",
-    1: "Cleaning",
-    2: "Lawyer",
-    3: "Purchasing Agent",
-    4: "Logistics Manager",
-    5: "Delivery Driver",
-    6: "Programmer",
-    7: "HR Manager",
-    8: "Graphic Designer",
-    9: "Negotiation",
-    10: "DJ",
-    11: "Hair Stylist",
-    12: "Security Guard",
-    13: "Headhunter",
-    14: "Factory Worker",
-    15: "Gym Trainer",
-    16: "None",
-    17: "Actor",
-    18: "Stage Crew",
-    19: "Projectionist",
+# As of the June 2026 game update, IDs are string identifiers prefixed "ba:"
+# (e.g. "ba:skill_cleaning", "ba:buildingtype_retail") instead of integer enums.
+
+# Display names for employee skills, keyed by their "ba:skill_*" identifier.
+SKILL_DISPLAY: Dict[str, str] = {
+    "ba:skill_customerservice": "Customer Service",
+    "ba:skill_cleaning": "Cleaning",
+    "ba:skill_lawyer": "Lawyer",
+    "ba:skill_purchasingagent": "Purchasing Agent",
+    "ba:skill_logisticsmanager": "Logistics Manager",
+    "ba:skill_deliverydriver": "Delivery Driver",
+    "ba:skill_programmer": "Programmer",
+    "ba:skill_hrmanager": "HR Manager",
+    "ba:skill_graphicdesigner": "Graphic Designer",
+    "ba:skill_dj": "DJ",
+    "ba:skill_hairstylist": "Hair Stylist",
+    "ba:skill_securityguard": "Security Guard",
+    "ba:skill_headhunter": "Headhunter",
+    "ba:skill_factoryworker": "Factory Worker",
+    "ba:skill_gymtrainer": "Gym Trainer",
+    "ba:skill_actor": "Actor",
+    "ba:skill_stagecrew": "Stage Crew",
+    "ba:skill_projectionist": "Projectionist",
+    "ba:skill_eventplanner": "Event Planner",
+    "ba:skill_travelagent": "Travel Agent",
 }
 
-BUILDING_TYPE_NAMES: Dict[int, str] = {
-    0: "Residential",
-    1: "Retail",
-    2: "Office",
-    3: "Warehouse",
-    4: "Special",
-    5: "Cinema",
-    6: "Theater",
+CLEANING_SKILL = "ba:skill_cleaning"
+
+
+def _format_ba_id(ba_id: str) -> str:
+    """Fallback display name for an unknown 'ba:namespace_value' identifier."""
+    if isinstance(ba_id, str) and "_" in ba_id:
+        return ba_id.split("_", 1)[1].replace("_", " ").title()
+    return str(ba_id)
+
+
+def skill_display(skill_id) -> str:
+    """Human-readable name for a 'ba:skill_*' identifier."""
+    return SKILL_DISPLAY.get(skill_id, _format_ba_id(skill_id))
+
+
+# Building types relevant for player businesses: "ba:buildingtype_*" -> display name
+PLAYER_BUILDING_TYPES: Dict[str, str] = {
+    "ba:buildingtype_retail": "Retail",
+    "ba:buildingtype_office": "Office",
+    "ba:buildingtype_warehouse": "Warehouse",
+    "ba:buildingtype_cinema": "Cinema",
+    "ba:buildingtype_theater": "Theater",
 }
 
-# Reverse lookup: name -> id
-BUILDING_TYPE_IDS: Dict[str, int] = {v: k for k, v in BUILDING_TYPE_NAMES.items()}
+# Reverse lookup: display name -> "ba:buildingtype_*" id
+BUILDING_TYPE_IDS: Dict[str, str] = {v: k for k, v in PLAYER_BUILDING_TYPES.items()}
 
-# Only building types relevant for player businesses
-PLAYER_BUILDING_TYPES: Dict[int, str] = {
-    1: "Retail",
-    2: "Office",
-    3: "Warehouse",
-    5: "Cinema",
-    6: "Theater",
-}
+# Tag that marks a business type as creatable by the player
+PLAYER_CREATION_TAG = "ba:businesstag_allowplayercreation"
 
 # Gym equipment bitmask (items with type & this != 0 are workout machines)
 GYM_EQUIPMENT_BITMASK = 1048576
@@ -101,6 +113,11 @@ def _load_and_index():
     json_path = _find_json_path()
     with open(json_path, 'r', encoding='utf-8') as f:
         _game_data = json.load(f)
+
+    # Normalize: the old boolean field `allowPlayerCreation` is now encoded as a
+    # tag. Recreate it so downstream filters (`allowPlayerCreation == 1`) keep working.
+    for bt in _game_data['business_types']:
+        bt['allowPlayerCreation'] = 1 if PLAYER_CREATION_TAG in bt.get('tags', []) else 0
 
     # Index items by ID and by name
     for item in _game_data['items']:
@@ -180,7 +197,7 @@ def _make_furniture_dict(item: dict) -> dict:
         'wholesale_price': item.get('wholesalePrice', 0.0),
         'is_workstation': item.get('assignable', 0) == 1,
         'suitable_skills': [
-            SKILL_NAMES.get(s, f'Skill_{s}')
+            skill_display(s)
             for s in item.get('suitableSkills', [])
         ],
         'can_showcase': showcase_products,
@@ -375,7 +392,10 @@ def get_furniture_for_business(business_name: str) -> List[dict]:
     # Furniture items have tags that indicate which businesses they can be placed in.
     # The tag value matches the business's businessTypeName.
     # For businesses without tag coverage (newer ones), fall back to same building type.
-    my_tag = bt.get('businessTypeName')
+    # Business tag on furniture uses the "ba:itemtag_*" namespace, while the
+    # business's own id is "ba:businesstype_*" — convert to match item tags.
+    _bt_name = bt.get('businessTypeName') or ''
+    my_tag = ('ba:itemtag_' + _bt_name.split('_', 1)[1]) if '_' in _bt_name else _bt_name
     primary_product_ids = set(p['itemName'] for p in bt.get('businessProducts', []))
 
     # Check if this business has any tag coverage on furniture
@@ -455,9 +475,9 @@ def get_employee_roles_for_business(business_name: str) -> List[str]:
         return ['Cleaning']
 
     skills = set(bt.get('employeePrimarySkills', []))
-    skills.add(1)  # Always add Cleaning (skill ID 1)
+    skills.add(CLEANING_SKILL)  # Always add Cleaning
 
-    return sorted([SKILL_NAMES.get(s, f'Skill_{s}') for s in skills])
+    return sorted([skill_display(s) for s in skills])
 
 
 # ============================================================================
@@ -497,8 +517,8 @@ def get_products_for_business(business_name: str) -> List[dict]:
 # PUBLIC API - ITEM LOOKUP
 # ============================================================================
 
-def get_item_by_id(item_id: int) -> Optional[dict]:
-    """Get an item by its numeric ID."""
+def get_item_by_id(item_id: str) -> Optional[dict]:
+    """Get an item by its id (e.g. 'ba:itemname_cupofcoffee')."""
     return _items_by_id.get(item_id)
 
 

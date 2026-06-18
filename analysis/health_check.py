@@ -84,12 +84,19 @@ def rank_products(biz_name: str) -> List[ProductScore]:
 # ZONE RANKING
 # =====================================
 
-NEIGHBOURHOOD_NAMES = {0: 'Murray Hill', 1: 'Industry City', 2: 'Midtown', 3: "Hell's Kitchen", 5: 'Lower Manhattan',
-                       6: 'Garment District'}
+# Neighbourhood ids became "ba:neighborhood_*" strings in the June 2026 update.
+NEIGHBOURHOOD_NAMES = {
+    'ba:neighborhood_murrayhill': 'Murray Hill',
+    'ba:neighborhood_industrycity': 'Industry City',
+    'ba:neighborhood_midtown': 'Midtown',
+    'ba:neighborhood_hellskitchen': "Hell's Kitchen",
+    'ba:neighborhood_lowermanhattan': 'Lower Manhattan',
+    'ba:neighborhood_garmentdistrict': 'Garment District',
+}
 
 @dataclass 
 class ZoneInfo:
-    neighbourhood_id: int
+    neighbourhood_id: str
     name: str 
     avg_traffic: float
     n_buildings: float

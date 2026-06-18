@@ -14,39 +14,57 @@ from typing import Tuple, Optional
 def detect_csv_format(content: str) -> str:
     """
     Detect which CSV format we're dealing with.
-    
+
     Args:
         content: Decoded CSV content as string
-        
+
     Returns:
-        'single_column' - Format like test.csv (needs manual parsing)
+        'single_column' - Format like test.csv (whole row wrapped in quotes
+                           with "" escaped quotes inside; needs manual parsing)
         'standard' - Format like Transactions.csv (standard CSV)
     """
     try:
-        # Get first line
         first_line = content.split('\n')[0].strip()
-        
-        # Key distinction:
-        # - Single column: Has "" (escaped quotes) 
-        # - Standard: Has "," but NOT ""
-        
-        has_escaped_quotes = '""' in first_line
-        has_standard_separator = '","' in first_line
-        
-        # If has escaped quotes → single column format
-        if has_escaped_quotes:
-            return 'single_column'
-        
-        # If has standard separator and no escaped quotes → standard CSV
-        if has_standard_separator:
-            return 'standard'
-        
-        # Default to single column for safety
-        return 'single_column'
-        
+        # The only format that needs manual parsing is the one where each row is
+        # a single quoted field containing "" escaped quotes. Everything else
+        # (comma- or semicolon-delimited) is handled by the standard pandas path.
+        return 'single_column' if '""' in first_line else 'standard'
     except Exception as e:
         print(f"Format detection error: {e}")
-        return 'single_column'
+        return 'standard'
+
+
+def detect_delimiter(content: str) -> str:
+    """
+    Detect the field delimiter. Non-English game exports (German, Italian,
+    French, ...) use ';' because ',' is the decimal separator in those locales.
+
+    Returns ';' or ',' (defaults to ',').
+    """
+    try:
+        # Use the first non-empty line as the sample
+        sample = next((ln for ln in content.split('\n') if ln.strip()), '')
+        semicolons = sample.count(';')
+        commas = sample.count(',')
+        return ';' if semicolons > commas else ','
+    except Exception:
+        return ','
+
+
+def _to_number(series: pd.Series, decimal: str) -> pd.Series:
+    """
+    Convert a string column to numeric, honoring the locale's decimal separator.
+
+    For decimal=',' (e.g. "1.234,56"): strip '.' thousands separators, then turn
+    the decimal ',' into '.'. For decimal='.' (e.g. "1,234.56"): strip ','
+    thousands separators.
+    """
+    s = series.astype(str).str.strip()
+    if decimal == ',':
+        s = s.str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+    else:
+        s = s.str.replace(',', '', regex=False)
+    return pd.to_numeric(s, errors='coerce')
 
 
 import streamlit as st
@@ -71,22 +89,29 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
         except:
             content = file_content.decode("utf-8")
         
-        # STEP 2: Detect format
+        # STEP 2: Detect format and delimiter
         format_type = detect_csv_format(content)
-        print(f"Detected format: {format_type}")
-        
+        delimiter = detect_delimiter(content)
+        # In ';'-delimited (non-English) exports the decimal separator is ','
+        decimal_sep = ',' if delimiter == ';' else '.'
+        print(f"Detected format: {format_type} | delimiter: '{delimiter}' | decimal: '{decimal_sep}'")
+
         if format_type == 'standard':
             # ============================================================
             # STANDARD CSV FORMAT (Transactions.csv)
             # ============================================================
+            # header=None: real game exports have NO header row, so the first
+            # transaction must be kept. If an export *does* include a header, its
+            # non-numeric day/price cells become NaN and get dropped below.
             df = pd.read_csv(
                 io.StringIO(content),
                 names=['description', 'day', 'type', 'price', 'balance'],
-                header=0  # Skip first row (it becomes column names)
+                sep=delimiter,
+                header=None
             )
-            
+
             print(f"Parsed as standard CSV: {len(df)} rows")
-            
+
         else:
             # ============================================================
             # SINGLE COLUMN FORMAT (test.csv) - Manual parsing
@@ -113,7 +138,7 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
                     if char == '"':
                         in_quotes = not in_quotes
                         continue
-                    if char == ',' and not in_quotes:
+                    if char == delimiter and not in_quotes:
                         parts.append(current)
                         current = ""
                         continue
@@ -138,10 +163,10 @@ def clean_big_ambitions_csv(file_content: bytes) -> Tuple[Optional[pd.DataFrame]
         # COMMON CLEANING FOR BOTH FORMATS
         # ============================================================
         
-        # Convert data types
-        df["day"] = pd.to_numeric(df["day"], errors="coerce")
-        df["price"] = pd.to_numeric(df["price"], errors="coerce")
-        df["balance"] = pd.to_numeric(df["balance"], errors="coerce")
+        # Convert data types (locale-aware: handles ',' decimal separators)
+        df["day"] = _to_number(df["day"], decimal_sep)
+        df["price"] = _to_number(df["price"], decimal_sep)
+        df["balance"] = _to_number(df["balance"], decimal_sep)
         
         # Remove invalid rows
         df = df.dropna(subset=["day", "price"])

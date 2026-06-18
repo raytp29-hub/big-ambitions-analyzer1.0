@@ -60,6 +60,8 @@ Built to solve the challenge of manually tracking profits and optimizing employe
 3. Navigate through the analysis modules
 4. For schedule optimization: configure your business setup and generate optimal schedules
 
+> ⚠️ **Set the game language to English before exporting.** The file now loads regardless of language (comma- and semicolon-delimited exports are both supported), but transaction categorization for the Profit & Loss analysis relies on English transaction-type names. Non-English exports will load but won't categorize correctly.
+
 *Note: Free hosting may take ~30 seconds to wake up after inactivity. Just refresh if it seems stuck.*
 
 ### Running Locally
