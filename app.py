@@ -580,7 +580,8 @@ else:
     else:
         df = st.session_state.df
         st.success(f"✅ Analyzing {len(df):,} transactions!")
-        
+        st.caption("💡 For correct Profit & Loss results, export your data with the game language set to **English**. Files in other languages load, but transaction categorization relies on English type names.")
+
         analyzer = TemporalAnalyzer(df)
             
         # Main Metrics
