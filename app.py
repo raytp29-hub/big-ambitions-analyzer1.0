@@ -442,6 +442,11 @@ else:
         # Welcome / User Guide
         st.info("👆 **Upload a CSV or XLSM file from the sidebar to get started!**")
 
+        # Highlighted, can't-miss note about exporting in English
+        st.warning("🌍 **Important: set the game language to English before exporting your data.** "
+                   "Files in any language now load, but the Profit & Loss analysis categorizes "
+                   "transactions by their English names — non-English exports won't categorize correctly.")
+
         # --- Quick Start ---
         st.subheader("🚀 Quick Start")
         st.markdown("""
@@ -449,7 +454,6 @@ else:
         2. **Upload** the file using the sidebar uploader
         3. **Explore** the dashboard and navigate to other modules from the sidebar
         """)
-        st.caption("💡 Tip: set the game language to **English** before exporting. Files in any language now load, but Profit & Loss categorization relies on English transaction-type names.")
 
         st.divider()
 
