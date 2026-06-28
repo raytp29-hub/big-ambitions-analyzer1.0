@@ -3,10 +3,12 @@ Schedule Constraints and Configuration
 Loads game data from JSON via core.game_data module.
 All business types, buildings, furniture, and roles are derived from the game data.
 """
+from collections import defaultdict
 import sys
 from pathlib import Path
 import pandas as pd
-from typing import Dict, List
+from typing import Dict, List, Tuple
+
 
 # Ensure project root is in path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,7 +21,54 @@ from core.game_data import (
     get_furniture_for_business as _get_furniture_for_business,
     get_employee_roles_for_business,
     format_item_name,
+    get_demand_multipliers,
+    display_to_internal,
 )
+
+
+
+
+DAY_NAME_TO_NUM = {
+    'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4,
+    'Friday': 5, 'Saturday': 6, 'Sunday': 7,
+}
+
+# ============================================================================
+# HELPER
+# ============================================================================
+
+def _hourly_multiplier_at(hour:int, hourly_bands: List[dict]) -> float:
+    """Multiplier della fascia che contiene `hour` (0-23). 0.0 se nessuna."""
+    h = hour % 24
+    for band in hourly_bands:
+        if band['start'] <= h < band['end']:
+            return band['multiplier']
+    return 0.0
+
+
+
+def compute_peak_customers(business_name: str, effective_capacity: int, daily_shifts: Dict[str, Dict[str, dict]],) -> Dict[Tuple[str, str], float]:
+    """Clienti dell'ora di picco per ogni (giorno, turno).
+    peak = effective_capacity * max(hourly_mult sulle ore del turno) * daily_mult[giorno]."""
+    mults = get_demand_multipliers(display_to_internal(business_name))
+    if mults is None:
+        return {}
+
+    hourly = mults['hourly']
+    daily = {d['day']: d['multiplier'] for d in mults['daily']}
+
+    peak: Dict[Tuple[str, str], float] = {}
+    for day_name, shifts in daily_shifts.items():
+        if not shifts:
+            continue
+        day_mult = daily.get(DAY_NAME_TO_NUM[day_name], 1.0)
+        for shift_name, info in shifts.items():
+            shift_hours = [(info['start'] + i) % 24 for i in range(info['hours'])]
+            peak_mult = max(_hourly_multiplier_at(h, hourly) for h in shift_hours)
+            peak[(day_name, shift_name)] = effective_capacity * peak_mult * day_mult
+    return peak
+
+
 
 
 # ============================================================================
@@ -98,6 +147,7 @@ def get_furniture_for_business(business_type: str) -> pd.DataFrame:
             'price': f'${f["price"]:,.0f}',
             'is_workstation': f['is_workstation'],
             'item_name_internal': f['item_name'],
+            'suitable_skills': f['suitable_skills']
         })
 
     return pd.DataFrame(rows)
@@ -137,6 +187,33 @@ def calculate_workstation_capacity(selected_furniture: List[Dict], business_cate
         if furn.get('is_workstation', False):
             workstation_count += furn.get('quantity', 1)
     return workstation_count if workstation_count > 0 else 1
+
+
+
+def get_role_workstations(selected_furniture: List[Dict]) -> Dict[str, List[int]]:
+    """
+    Per ruolo, la lista (espansa per quantità) dei throughput delle postazioni possedute.
+    Solo furniture con is_workstation=True.
+
+    Es. con 3 Checkout (30) + 2 Cash Register (20) + 1 Cleaning Station (0):
+      {'Customer Service': [30, 30, 30, 20, 20], 'Cleaning': [0]}
+
+    Da qui si ricava tutto:
+      - n° postazioni del ruolo  = len(lista)          -> Vincolo A
+      - capacità per il greedy   = lista ordinata desc -> Vincolo B
+    """
+    role_caps = defaultdict(list)
+
+    for furn in selected_furniture:
+        if not furn.get('is_workstation', False):
+            continue
+        capacity = furn.get('unit_capacity', 0)
+        quantity = furn.get('quantity', 1)
+
+        for role in furn.get('suitable_skills', []):
+            role_caps[role].extend([capacity] * quantity)
+
+    return dict(role_caps)
 
 
 # ============================================================================

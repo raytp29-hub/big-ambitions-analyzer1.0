@@ -168,6 +168,7 @@ def render_business_setup():
                 'unit_price': row['price'],
                 'total_price': parse_price(row['price']) * qty,
                 'is_workstation': row.get('is_workstation', False),
+                'suitable_skills': row.get('suitable_skills', []),
             })
 
     # SECTION 5: Capacity Analysis
