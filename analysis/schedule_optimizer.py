@@ -448,7 +448,7 @@ def optimize_schedule(
                 for weekend_day in ['Saturday', 'Sunday']:
                     if weekend_day in daily_shifts and daily_shifts[weekend_day]:
                         for shift_name in daily_shifts[weekend_day].keys():
-                            prob += x[emp.name][weekend_day][shift_name] == 0, f"{emp.name}_{weekend_day}_off"
+                            prob += x[emp.name][weekend_day][shift_name] == 0, f"{emp.name}_{weekend_day}_{shift_name}_off"
                             constraint_count += 1
                 print(f"  ✓ {emp.name}: Free weekends")
     
