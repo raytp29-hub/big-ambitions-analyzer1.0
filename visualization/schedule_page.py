@@ -176,20 +176,30 @@ def render_business_setup():
         st.divider()
         st.subheader("📊 Capacity Analysis")
         
-        # Find bottleneck (furniture with minimum TOTAL capacity)
-        bottleneck = min(selected_furniture, key=lambda x: x['total_capacity'])
-        effective_capacity = bottleneck['total_capacity']
-        
-        # Show bottleneck warning
-        st.warning(f"⚠️ **Bottleneck:** {bottleneck['name']} ({effective_capacity} capacity total)")
-        st.info(f"✓ Your business can serve: **{effective_capacity} customers/hour**")
-        
-        with st.expander("💡 How to increase capacity"):
-            st.markdown(f"""
-            To increase from {effective_capacity} to higher capacity:
-            - Add more **{bottleneck['name']}** units (currently {bottleneck['quantity']}x)
-            - Each additional unit adds {bottleneck['unit_capacity']} capacity
-            """)
+        # Bottleneck = minima capacita' tra le SOLE furniture che servono clienti.
+        # Le 0-capacita' (es. Cleaning Station) non sono stadi del flusso: escluse,
+        # altrimenti azzererebbero la capacita' e la domanda di Customer Service.
+        customer_furniture = [f for f in selected_furniture if f['total_capacity'] > 0]
+        if customer_furniture:
+            bottleneck = min(customer_furniture, key=lambda x: x['total_capacity'])
+            effective_capacity = bottleneck['total_capacity']
+        else:
+            bottleneck = None
+            effective_capacity = 0
+
+        if bottleneck:
+            st.warning(f"⚠️ **Bottleneck:** {bottleneck['name']} ({effective_capacity} capacity total)")
+            st.info(f"✓ Your business can serve: **{effective_capacity} customers/hour**")
+
+            with st.expander("💡 How to increase capacity"):
+                st.markdown(f"""
+                To increase from {effective_capacity} to higher capacity:
+                - Add more **{bottleneck['name']}** units (currently {bottleneck['quantity']}x)
+                - Each additional unit adds {bottleneck['unit_capacity']} capacity
+                """)
+        else:
+            st.warning("⚠️ No customer-serving furniture selected (only 0-capacity items "
+                       "like Cleaning Station). Add e.g. a Cash Register to set capacity.")
         
         # Calculate total cost
         total_cost = sum(f['total_price'] for f in selected_furniture)
@@ -632,12 +642,14 @@ def render_optimization():
             st.stop()
         
         with st.spinner("Optimizing schedules..."):
+            st.session_state.is_optimizing = True
             try:
                 result = optimize_schedule(
                     business_setup=st.session_state.business_setup,
                     employees=st.session_state.employees,
                     weekly_schedule=st.session_state.weekly_schedule,
                     max_simultaneous=st.session_state.max_simultaneous_employees,
+                    selected_furniture=st.session_state.selected_furniture,
                     alpha=alpha,
                     beta=beta
                 )
@@ -645,35 +657,7 @@ def render_optimization():
             except Exception as e:
                 st.error(f"❌ Optimization error: {type(e).__name__}")
                 st.error(f"Details: {str(e)}")
-                st.info("This might be due to:")
-                st.code("""
-    - Duplicate employee names
-    - Invalid constraint configuration
-    - PuLP solver issue
-                """)
-                # Salva un risultato di errore
                 st.session_state.optimization_result = None
-        
-        
-        
-        # Pulisci vecchi risultati
-        if 'optimization_result' in st.session_state:
-            del st.session_state.optimization_result
-        
-        # Imposta flag
-        st.session_state.is_optimizing = True
-        
-        with st.spinner("Optimizing schedules..."):
-            try:
-                result = optimize_schedule(
-                    business_setup=st.session_state.business_setup,
-                    employees=st.session_state.employees,
-                    weekly_schedule=st.session_state.weekly_schedule,
-                    max_simultaneous=st.session_state.max_simultaneous_employees,
-                    alpha=alpha,
-                    beta=beta
-                )
-                st.session_state.optimization_result = result
             finally:
                 # Assicurati che il flag venga sempre resettato
                 st.session_state.is_optimizing = False
@@ -713,30 +697,58 @@ def render_optimization():
             with col1:
                 st.metric("Total Weekly Cost", f"${result.total_cost:.2f}")
             with col2:
-                st.metric("Employee Satisfaction", f"{result.total_satisfaction:.1f}%")
+                sat_display = "N/A" if result.total_satisfaction is None else f"{result.total_satisfaction:.1f}%"
+                st.metric("Employee Satisfaction", sat_display)
             
             # Schedule table
             st.subheader("📅 Optimized Weekly Schedule")
             
            
-            schedule_data = {}
-            daily_shifts = result.daily_shifts
-            
-            for emp in st.session_state.employees:
-                schedule_data[emp.name] = []
-                
-                for day in DAYS_OF_WEEK:
-                    shifts = result.schedule[emp.name][day]
-                    if shifts:
-                        shifts_info = daily_shifts[day][shifts[0]]
-                        schedule_data[emp.name].append(
-                            f"{shifts_info['start']}-{shifts_info['end']}"
-                        )
-                    else:
-                        schedule_data[emp.name].append('-')
-            
-            df = pd.DataFrame(schedule_data, index=DAYS_OF_WEEK)
-            st.dataframe(df, use_container_width=True)
+            import streamlit.components.v1 as components
+            from visualization.schedule_grid import (
+                build_station_rows, assign_shift_employees, build_day_html
+            )
+
+            stations = build_station_rows(st.session_state.selected_furniture)
+            assignment = assign_shift_employees(result, st.session_state.employees, stations)
+
+            grid_col, panel_col = st.columns([3, 1])
+
+            with grid_col:
+                open_days = [d.day_name for d in st.session_state.weekly_schedule if d.is_open]
+                if not open_days:
+                    st.info("No open days.")
+                elif not stations:
+                    st.info("No workstation selected: grid unavailable.")
+                else:
+                    sel_day = st.radio("Day", open_days, horizontal=True, key="grid_day")
+                    grid_html = build_day_html(
+                        sel_day, result, stations, assignment, st.session_state.employees
+                    )
+                    components.html(
+                        grid_html,
+                        height=70 + 49 * (len(stations) + 1),
+                        scrolling=False,
+                    )
+
+            with panel_col:
+                dropped = [
+                    e.name for e in st.session_state.employees
+                    if not any(result.schedule[e.name][d] for d in DAYS_OF_WEEK)
+                ]
+                st.markdown(f"**Dropped ({len(dropped)})**")
+                st.caption("\n".join(f"• {n}" for n in dropped) if dropped else "none")
+
+                st.markdown("**Active per role**")
+                role_counts = {}
+                for e in st.session_state.employees:
+                    if any(result.schedule[e.name][d] for d in DAYS_OF_WEEK):
+                        role_counts[e.role] = role_counts.get(e.role, 0) + 1
+                if role_counts:
+                    for role, n in sorted(role_counts.items()):
+                        st.caption(f"{role}: {n}")
+                else:
+                    st.caption("—")
     
     
         
