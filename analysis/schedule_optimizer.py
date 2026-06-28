@@ -179,6 +179,37 @@ def check_shift_compatible_with_demands(
 
 
 # ============================================================================
+# SATISFACTION HELPERS
+# ============================================================================
+
+def _forbidden_shift_sum(emp_name, constraint, x, daily_shifts):
+    """Somma delle x dei turni 'vietati' da una richiesta di tipo 'avoid'
+    (no_morning, no_afternoon, no_evening, no_night, no_cleaning, free_weekend).
+    Se la somma e' 0, la richiesta e' soddisfatta."""
+    if constraint == 'free_weekend':
+        return pulp.lpSum(
+            x[emp_name][day][sh]
+            for day in ('Saturday', 'Sunday')
+            if day in daily_shifts and daily_shifts[day]
+            for sh in daily_shifts[day]
+        )
+    forbidden_types = {
+        'no_morning': {'morning'},
+        'no_afternoon': {'afternoon'},
+        'no_evening': {'afternoon', 'night'},
+        'no_night': {'night'},
+        'no_cleaning': {'night'},
+    }.get(constraint, set())
+    return pulp.lpSum(
+        x[emp_name][day][sh]
+        for day in DAYS_OF_WEEK
+        if day in daily_shifts and daily_shifts[day]
+        for sh, info in daily_shifts[day].items()
+        if info['type'] in forbidden_types
+    )
+
+
+# ============================================================================
 # MAIN OPTIMIZATION FUNCTION
 # ============================================================================
 
@@ -297,8 +328,9 @@ def optimize_schedule(
         if day in daily_shifts and daily_shifts[day]
         for shift_name, shift_info in daily_shifts[day].items()
     )
-    prob += total_cost_expr + 0.01 * pulp.lpSum(y[emp.name] for emp in employees), "total_cost"
-    print(f"  Objective set: minimize weekly wage cost (+ tiny active-employee penalty)")
+    # L'obiettivo viene impostato in fondo (sezione 4.9), dopo aver creato le
+    # variabili di soddisfazione, cosi' include costo E soddisfazione insieme.
+    print(f"  Cost expression built (objective set later, with satisfaction)")
         
         
      # ========================================================================
@@ -535,6 +567,71 @@ def optimize_schedule(
         constraint_count += 1
     print(f"  ✓ Vincolo B: fabbisogno per ruolo dal flusso clienti")
 
+    # ------------------------------------------------------------------------
+    # 4.9: Soddisfazione soft - richieste NON-critical nell'obiettivo
+    # Le critical sono gia' vincoli hard; qui premiamo important/nice_to_have.
+    # Solo richieste 'schedule' (le altre dipendono dal business, non dai turni).
+    # ------------------------------------------------------------------------
+    BIG_M = 60  # tetto ore/giorni settimanali plausibile (per i vincoli a due lati)
+    satisfaction_terms = []  # accumulatore di points * s
+
+    for emp in employees:
+        hours_e = pulp.lpSum(
+            info['hours'] * x[emp.name][day][sh]
+            for day in DAYS_OF_WEEK if day in daily_shifts and daily_shifts[day]
+            for sh, info in daily_shifts[day].items()
+        )
+        days_e = pulp.lpSum(
+            x[emp.name][day][sh]
+            for day in DAYS_OF_WEEK if day in daily_shifts and daily_shifts[day]
+            for sh in daily_shifts[day]
+        )
+
+        for i, demand in enumerate(emp.demands):
+            if demand.priority == 'critical' or demand.category != 'schedule':
+                continue
+
+            points = SATISFACTION_POINTS[demand.priority]
+            tag = f"{emp.name}_{i}".replace(' ', '_')
+            s = pulp.LpVariable(f"sat_{tag}", cat='Binary')
+            prob += s <= y[emp.name], f"satlink_{tag}"
+            constraint_count += 1
+
+            c = demand.constraint
+            if c in ('no_morning', 'no_afternoon', 'no_evening', 'no_night', 'no_cleaning', 'free_weekend'):
+                forbidden = _forbidden_shift_sum(emp.name, c, x, daily_shifts)
+                prob += s <= 1 - forbidden, f"satavoid_{tag}"
+                constraint_count += 1
+            elif c == 'part_time':
+                prob += hours_e >= 10 * s, f"satptlo_{tag}"
+                prob += hours_e <= 30 + BIG_M * (1 - s), f"satpthi_{tag}"
+                constraint_count += 2
+            elif c == 'full_time':
+                prob += hours_e >= 30 * s, f"satftlo_{tag}"
+                prob += hours_e <= 50 + BIG_M * (1 - s), f"satfthi_{tag}"
+                constraint_count += 2
+            elif c == 'four_days':
+                prob += days_e <= 4 + BIG_M * (1 - s), f"sat4d_{tag}"
+                constraint_count += 1
+            elif c == 'five_days':
+                prob += days_e <= 5 + BIG_M * (1 - s), f"sat5d_{tag}"
+                constraint_count += 1
+            else:
+                continue  # tipo schedule non gestito: nessun premio
+
+            satisfaction_terms.append(points * s)
+
+    sat_total = pulp.lpSum(satisfaction_terms)
+    print(f"  ✓ Soddisfazione soft: {len(satisfaction_terms)} richieste non-critical pesate")
+
+    # Obiettivo finale: alpha*costo - beta*soddisfazione + spareggio su y.
+    prob += (
+        alpha * total_cost_expr
+        + 0.01 * pulp.lpSum(y[emp.name] for emp in employees)
+        - beta * sat_total
+    ), "objective"
+    print(f"  Objective set: alpha*cost - beta*satisfaction (alpha={alpha}, beta={beta})")
+
     print(f"✓ Added {constraint_count} total constraints")
     
     
@@ -672,9 +769,16 @@ def optimize_schedule(
         emp_schedule = schedule[emp.name]
         total_hours = calculate_total_hours(emp_schedule, daily_shifts)
         giorni_lavorativi = count_working_days(emp_schedule)
+
+        # 5a: la soddisfazione conta solo per i dipendenti effettivamente in turno.
+        # Un dipendente scartato (y=0, 0 turni) non entra ne' al numeratore ne' al denominatore.
+        if giorni_lavorativi == 0:
+            continue
         
         
         for demand in emp.demands:
+            if demand.category != 'schedule':
+                continue  # non valutabile senza config business (insurance/env/equipment)
             points = SATISFACTION_POINTS[demand.priority]
             max_possible_satisfaction += points
             
@@ -748,8 +852,14 @@ def optimize_schedule(
                 total_satisfaction += points
     
     
-    satisfaction_pct = (total_satisfaction / max_possible_satisfaction * 100) if max_possible_satisfaction > 0 else 0
-    print(f"  Total satisfaction: {satisfaction_pct:.1f}% ({total_satisfaction}/{max_possible_satisfaction} points)")
+    if max_possible_satisfaction > 0:
+        satisfaction_pct = total_satisfaction / max_possible_satisfaction * 100
+        sat_str = f"{satisfaction_pct:.1f}%"
+    else:
+        # Nessuna richiesta tra i dipendenti attivi: niente da soddisfare -> N/A
+        satisfaction_pct = None
+        sat_str = "N/A"
+    print(f"  Total satisfaction: {sat_str} ({total_satisfaction}/{max_possible_satisfaction} points)")
             
     
     
