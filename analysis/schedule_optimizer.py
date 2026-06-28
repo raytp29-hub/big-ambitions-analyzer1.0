@@ -256,19 +256,41 @@ def optimize_schedule(
     
     
     # ========================================================================
-    # STEP 3: Define objective function
+    # STEP 3: Active-employee variables + objective function
     # ========================================================================
-    print("\n[Step 3] Defining objective function...")
-    
-    # Satisfaction points by priority
+    print("\n[Step 3] Creating active-employee vars and objective...")
+
+    # y[employee_name] = 1 se il dipendente è ATTIVO questa settimana, 0 se scartato
+    y = {}
+    for emp in employees:
+        y[emp.name] = pulp.LpVariable(f"y_{emp.name}", cat='Binary')
+
+    # Collegamento x <= y: se y=0 il dipendente non può lavorare nessun turno
+    for emp in employees:
+        for day in DAYS_OF_WEEK:
+            if day in daily_shifts and daily_shifts[day]:
+                for shift_name in daily_shifts[day].keys():
+                    prob += x[emp.name][day][shift_name] <= y[emp.name], \
+                        f"link_{emp.name}_{day}_{shift_name}"
+
+    # Satisfaction points by priority (usati nello Step 5 per il punteggio)
     SATISFACTION_POINTS = {
         'critical': 100,
         'important': 80,
         'nice_to_have': 50
     }
-    
-    print(f"  Satisfaction component: sum of (demand_points × fulfillment)")
-    print(f"  (Actual calculation happens in Step 5 after solving)")
+
+    # Obiettivo: minimizza il costo salariale settimanale.
+    # + penalità minima su Σy: a parità di costo, preferisci meno dipendenti attivi.
+    total_cost_expr = pulp.lpSum(
+        emp.hourly_wage * shift_info['hours'] * x[emp.name][day][shift_name]
+        for emp in employees
+        for day in DAYS_OF_WEEK
+        if day in daily_shifts and daily_shifts[day]
+        for shift_name, shift_info in daily_shifts[day].items()
+    )
+    prob += total_cost_expr + 0.01 * pulp.lpSum(y[emp.name] for emp in employees), "total_cost"
+    print(f"  Objective set: minimize weekly wage cost (+ tiny active-employee penalty)")
         
         
      # ========================================================================
@@ -294,16 +316,16 @@ def optimize_schedule(
         for demand in emp.demands:
             if demand.category == 'schedule':
                 if demand.constraint == 'part_time' and demand.priority == 'critical':
-                    # Part-time: 10-30 hours/week
-                    prob += total_hours >= 10, f"{emp.name}_min_part_time"
-                    prob += total_hours <= 30, f"{emp.name}_max_part_time"
+                    # Part-time: 10-30 hours/week (condizionato su y: se y=0 nessun minimo)
+                    prob += total_hours >= 10 * y[emp.name], f"{emp.name}_min_part_time"
+                    prob += total_hours <= 30 * y[emp.name], f"{emp.name}_max_part_time"
                     constraint_count += 2
                     print(f"  ✓ {emp.name}: Part-time (10-30h/week)")
-                
+
                 elif demand.constraint == 'full_time' and demand.priority == 'critical':
-                    # Full-time: 30-50 hours/week
-                    prob += total_hours >= 30, f"{emp.name}_min_full_time"
-                    prob += total_hours <= 50, f"{emp.name}_max_full_time"
+                    # Full-time: 30-50 hours/week (condizionato su y)
+                    prob += total_hours >= 30 * y[emp.name], f"{emp.name}_min_full_time"
+                    prob += total_hours <= 50 * y[emp.name], f"{emp.name}_max_full_time"
                     constraint_count += 2
                     print(f"  ✓ {emp.name}: Full-time (30-50h/week)")
     
