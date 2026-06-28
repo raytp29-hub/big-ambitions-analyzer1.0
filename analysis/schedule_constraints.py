@@ -69,6 +69,37 @@ def compute_peak_customers(business_name: str, effective_capacity: int, daily_sh
     return peak
 
 
+def _stations_needed(throughputs: List[int], peak: float) -> int:
+    """Minimo n° di postazioni (dalle più capienti) per coprire `peak` clienti.
+    Se nemmeno tutte bastano, restituisce quante ne hai (sei capacity-limited)."""
+    if peak <= 0:
+        return 0
+    cum = 0
+    for k, cap in enumerate(sorted(throughputs, reverse=True), start=1):
+        cum += cap
+        if cum >= peak:
+            return k
+    return len(throughputs)
+
+
+def compute_role_demand(roles: List[str], peak_customers: Dict[Tuple[str, str], float], role_workstations: Dict[str, List[int]], cleaning_per_shift: int = 1, headcount_per_shift: int = 1, ) -> Dict[Tuple[str, str, str], int]:
+    """Fabbisogno minimo di addetti per (ruolo, giorno, turno)."""
+    demand: Dict[Tuple[str, str, str], int] = {}
+    
+    for role in roles:
+        stations = role_workstations.get(role, [])
+        for (day, shift), peak in peak_customers.items():
+            if stations and max(stations) > 0:
+                need = _stations_needed(stations, peak)
+            elif stations:
+                need = min(cleaning_per_shift, len(stations))
+            else:
+                need = headcount_per_shift
+                
+            demand[(role, day, shift)] = need
+            
+    return demand
+
 
 
 # ============================================================================
