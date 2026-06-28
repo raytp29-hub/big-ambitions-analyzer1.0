@@ -9,6 +9,11 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass
 import pulp
 from analysis.schedule_models import Employee, DailySchedule, BusinessSetup, OptimizationResult
+from analysis.schedule_constraints import (
+    get_role_workstations,
+    compute_peak_customers,
+    compute_role_demand,
+)
 
 
 SHIFTS = {
@@ -182,6 +187,9 @@ def optimize_schedule(
     employees: List[Employee],
     weekly_schedule: List[DailySchedule],
     max_simultaneous: int,
+    selected_furniture: List[Dict] = None,
+    cleaning_per_shift: int = 1,
+    security_per_shift: int = 1,
     alpha: float = 1.0,
     beta: float = 0.5
 ) -> OptimizationResult:
@@ -473,8 +481,61 @@ def optimize_schedule(
                 constraint_count += 1
     
     print(f"  ✓ Minimum 1 employee per shift (coverage)")
-    
-    print(f"✓ Added {constraint_count} total constraints")   
+
+    # ------------------------------------------------------------------------
+    # 4.7: Vincolo A - capacità funzionale (postazioni per ruolo)
+    # Per ogni turno: dipendenti attivi di un ruolo <= postazioni di quel ruolo.
+    # ------------------------------------------------------------------------
+    role_stations = get_role_workstations(selected_furniture or [])
+
+    emps_by_role = {}
+    for emp in employees:
+        emps_by_role.setdefault(emp.role, []).append(emp)
+
+    for role, role_emps in emps_by_role.items():
+        n_stations = len(role_stations.get(role, []))
+        if n_stations == 0:
+            continue  # ruolo senza postazioni (es. Security): nessun tetto da furniture
+        role_key = role.replace(' ', '')
+        for day in DAYS_OF_WEEK:
+            if day in daily_shifts and daily_shifts[day]:
+                for shift_name in daily_shifts[day].keys():
+                    active_in_role = pulp.lpSum(
+                        x[emp.name][day][shift_name] for emp in role_emps
+                    )
+                    prob += active_in_role <= n_stations, \
+                        f"capacity_{role_key}_{day}_{shift_name}"
+                    constraint_count += 1
+    print(f"  ✓ Vincolo A: tetto postazioni per ruolo")
+
+    # ------------------------------------------------------------------------
+    # 4.8: Vincolo B - domanda variabile (fabbisogno per ruolo dal flusso clienti)
+    # Per ogni (ruolo, turno): dipendenti attivi del ruolo >= fabbisogno dal picco.
+    # ------------------------------------------------------------------------
+    peak = compute_peak_customers(
+        business_setup.business_name,
+        business_setup.capacity_limit,
+        daily_shifts,
+    )
+    role_demand = compute_role_demand(
+        list(emps_by_role.keys()),
+        peak,
+        role_stations,
+        cleaning_per_shift=cleaning_per_shift,
+        headcount_per_shift=security_per_shift,
+    )
+    for (role, day, shift_name), need in role_demand.items():
+        if need <= 0 or role not in emps_by_role:
+            continue
+        active_in_role = pulp.lpSum(
+            x[emp.name][day][shift_name] for emp in emps_by_role[role]
+        )
+        prob += active_in_role >= need, \
+            f"demand_{role.replace(' ', '')}_{day}_{shift_name}"
+        constraint_count += 1
+    print(f"  ✓ Vincolo B: fabbisogno per ruolo dal flusso clienti")
+
+    print(f"✓ Added {constraint_count} total constraints")
     
     
     
