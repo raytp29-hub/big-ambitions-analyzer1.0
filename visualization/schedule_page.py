@@ -5,7 +5,7 @@ UI for configuring business setup and employees
 import streamlit as st
 import pandas as pd
 from typing import List, Optional
-from analysis.schedule_optimizer import optimize_schedule
+from analysis.schedule_optimizer import optimize_schedule, optimize_schedule_variable
 
 
 
@@ -261,7 +261,23 @@ def render_employee_configuration():
     if not st.session_state.business_setup:
         st.warning("⚠️ Please complete Step 1: Business Setup first")
         return
-    
+
+    # --- Gestione stato del form PRIMA di creare i widget ---
+    # Streamlit non permette di modificare la key di un widget dopo che e' stato
+    # istanziato: quindi pulizia (dopo save/cancel) e caricamento (in edit) vanno
+    # fatti qui, in cima, via flag impostati dai pulsanti.
+    if st.session_state.pop('_reset_emp_form', False):
+        for _k in ('emp_name', 'emp_wage', 'emp_role',
+                   'demand_category', 'demand_constraint', 'demand_priority'):
+            st.session_state.pop(_k, None)
+    _load_uid = st.session_state.pop('_load_emp_uid', None)
+    if _load_uid is not None:
+        _emp = next((e for e in st.session_state.employees if e.uid == _load_uid), None)
+        if _emp is not None:
+            st.session_state['emp_name'] = _emp.name
+            st.session_state['emp_wage'] = float(_emp.hourly_wage)
+            st.session_state['emp_role'] = _emp.role
+
     # Check if editing
     edit_index = st.session_state.edit_employee_index
     if edit_index is not None and edit_index < len(st.session_state.employees):
@@ -417,30 +433,42 @@ def render_employee_configuration():
             use_container_width=True,
             disabled=not name
         ):
-            new_employee = Employee(
-                name=name,
-                role=role,
-                hourly_wage=hourly_wage,
-                demands=st.session_state.temp_demands.copy()
+            # Blocco nomi duplicati: evita due dipendenti con lo stesso nome
+            # (confonde report e modifiche). Esclude quello in modifica.
+            _norm = name.strip().lower()
+            _dup = any(
+                e.name.strip().lower() == _norm and i != edit_index
+                for i, e in enumerate(st.session_state.employees)
             )
-            
-            if employee_to_edit:
-                st.session_state.employees[edit_index] = new_employee
-                st.success(f"✓ Employee updated: {name}")
+            if _dup:
+                st.error(f"⚠️ An employee named '{name}' already exists. Use a different name.")
             else:
-                st.session_state.employees.append(new_employee)
-                st.success(f"✓ Employee added: {name}")
-            
-            # Reset
-            st.session_state.edit_employee_index = None
-            st.session_state.temp_demands = []
-            st.rerun()
+                new_employee = Employee(
+                    name=name,
+                    role=role,
+                    hourly_wage=hourly_wage,
+                    demands=st.session_state.temp_demands.copy()
+                )
+
+                if employee_to_edit:
+                    st.session_state.employees[edit_index] = new_employee
+                    st.success(f"✓ Employee updated: {name}")
+                else:
+                    st.session_state.employees.append(new_employee)
+                    st.success(f"✓ Employee added: {name}")
+
+                # Reset: azzera modalita' edit e PULISCI i campi al prossimo run
+                st.session_state.edit_employee_index = None
+                st.session_state.temp_demands = []
+                st.session_state['_reset_emp_form'] = True
+                st.rerun()
     
     with col2:
         if employee_to_edit:
             if st.button("✗ Cancel Edit", use_container_width=True):
                 st.session_state.edit_employee_index = None
                 st.session_state.temp_demands = []
+                st.session_state['_reset_emp_form'] = True
                 st.rerun()
 
 
@@ -498,6 +526,8 @@ def render_employees_summary():
                     if st.button("✏️", key=f"edit_{idx}", use_container_width=True):
                         st.session_state.edit_employee_index = idx
                         st.session_state.temp_demands = emp.demands.copy()
+                        # Carica i valori del dipendente nei campi al prossimo run
+                        st.session_state['_load_emp_uid'] = emp.uid
                         st.rerun()
                 
                 with del_col:
@@ -604,6 +634,64 @@ def render_operating_hours():
 st.divider()
 
 # ============================================================================
+# STAFFING SUGGESTION (advice from furniture + hours + game data)
+# ============================================================================
+
+def render_staffing_suggestion():
+    st.header("🧑‍💼 Staffing Suggestion")
+
+    setup = st.session_state.get('business_setup')
+    furniture = st.session_state.get('selected_furniture')
+    week = st.session_state.get('weekly_schedule')
+    if not setup or not furniture:
+        st.info("Complete the business setup (with furniture) to see a staffing suggestion.")
+        return
+    if not week:
+        st.info("Set the operating hours to see a staffing suggestion.")
+        return
+
+    from analysis.schedule_constraints import (
+        compute_staffing_recommendation, hours_range, get_role_workstations,
+    )
+
+    role_ws = get_role_workstations(furniture)
+    if not role_ws:
+        st.info("No workstations selected yet — add furniture to get a suggestion.")
+        return
+
+    open_hours = {
+        d.day_name: (hours_range(d.start_hour, d.end_hour) if d.is_open else [])
+        for d in week
+    }
+    biz = getattr(setup, 'business_name', '') or st.session_state.get('selected_business_type', '')
+    cap = getattr(setup, 'capacity_limit', 0)
+    recs = compute_staffing_recommendation(biz, cap, open_hours, role_ws)
+
+    st.caption(
+        "Suggested hiring based on your furniture, opening hours and the game's demand "
+        "curve — no employees needed yet. 'Why' shows the drivers behind each number."
+    )
+    any_shown = False
+    for role, r in sorted(recs.items()):
+        if r['headcount'] <= 0:
+            continue
+        any_shown = True
+        mix = []
+        if r['full_time']:
+            mix.append(f"{r['full_time']} full-time")
+        if r['part_time']:
+            mix.append(f"{r['part_time']} part-time")
+        mix_txt = " + ".join(mix) if mix else f"{r['headcount']}"
+        st.markdown(f"**{role}** — hire **{r['headcount']}**  ({mix_txt})")
+        st.caption(
+            f"Why: up to **{r['peak']}** at once during peak · open span **{r['span']}h/day** "
+            f"· ~**{r['hours']}h/week** of work needed · {r['stations']} station(s)"
+        )
+    if not any_shown:
+        st.caption("No staffing needed for the current setup.")
+
+
+# ============================================================================
 # STEP 5: RENDER OPTIMIZATION
 # ============================================================================
 
@@ -644,14 +732,15 @@ def render_optimization():
         with st.spinner("Optimizing schedules..."):
             st.session_state.is_optimizing = True
             try:
-                result = optimize_schedule(
+                # NUOVO modello a turni variabili (fallback: optimize_schedule)
+                result = optimize_schedule_variable(
                     business_setup=st.session_state.business_setup,
                     employees=st.session_state.employees,
                     weekly_schedule=st.session_state.weekly_schedule,
                     max_simultaneous=st.session_state.max_simultaneous_employees,
                     selected_furniture=st.session_state.selected_furniture,
                     alpha=alpha,
-                    beta=beta
+                    beta=beta,
                 )
                 st.session_state.optimization_result = result
             except Exception as e:
@@ -699,7 +788,75 @@ def render_optimization():
             with col2:
                 sat_display = "N/A" if result.total_satisfaction is None else f"{result.total_satisfaction:.1f}%"
                 st.metric("Employee Satisfaction", sat_display)
+
+            # --- Coverage: real gaps (need staff) vs extra (service margin) ---
+            cov = result.coverage_report or {}
+            real = {r: d for r, d in cov.items() if d.get('real', 0) > 0.5}
+            opt = {r: d for r, d in cov.items() if d.get('optional', 0) > 0.5}
+            if real:
+                rows_txt = "\n".join(
+                    f"- **{r}**: {d['real']:.0f}h uncovered → hire **~{d['suggest']} more "
+                    f"employee{'' if d['suggest']==1 else 's'}**"
+                    for r, d in sorted(real.items())
+                )
+                st.warning("⚠️ **Incomplete coverage — more employees needed**\n\n" + rows_txt)
+            if opt:
+                rows_txt = "\n".join(
+                    f"- **{r}**: {d['optional']:.0f}h of extra coverage left unfilled"
+                    for r, d in sorted(opt.items())
+                )
+                st.info("ℹ️ **Service margin**: with more staff you could serve more customers "
+                        "during peak hours (this is not a sales gap, it's a cost trade-off).\n\n" + rows_txt)
+            if not real and not opt:
+                st.success("✅ Full coverage: no uncovered hours.")
+
             
+
+            # --- Comparison with the actual business wage (baseline = weekly average) ---
+            st.markdown("**Comparison with the current business**")
+            df_tx = st.session_state.get('df')
+            if df_tx is None:
+                st.caption("💡 Import transactions on the main page to compare the planned "
+                           "cost with the business's actual wage.")
+            else:
+                from analysis.temporal_analyzer import TemporalAnalyzer
+                ta = TemporalAnalyzer(df_tx)
+                wk_all = ta.aggregate_by_period('weekly')
+                biz_names = (
+                    sorted(wk_all['business'].dropna().unique().tolist())
+                    if 'business' in wk_all.columns else []
+                )
+                if not biz_names or 'wages' not in wk_all.columns:
+                    st.caption("No wage data in the imported file.")
+                else:
+                    sel_biz = st.selectbox(
+                        "Business to compare", options=biz_names, key="cmp_wage_business"
+                    )
+                    wk = wk_all[wk_all['business'] == sel_biz]
+                    n_days = int(getattr(ta, 'total_days', 0) or 0)
+                    if len(wk) > 0 and n_days > 0:
+                        # Tasso settimanale "vero": wage totale del business sui dati,
+                        # normalizzato a 7 giorni. Evita che una settimana parziale a
+                        # fine periodo abbassi artificialmente la media.
+                        total_wages = float(wk['wages'].sum())
+                        avg_weekly = total_wages / n_days * 7
+                        delta = result.total_cost - avg_weekly
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.metric("Avg weekly wage", f"${avg_weekly:,.2f}")
+                        with c2:
+                            st.metric(
+                                "Δ planned − actual", f"${delta:,.2f}",
+                                delta=f"{delta:,.2f}", delta_color="inverse"
+                            )
+                        st.caption(
+                            f"Baseline = total business wage ÷ {n_days} days × 7 "
+                            f"(weekly rate, normalized for partial weeks). "
+                            f"Base salaries only (no insurance/HR), consistent with the optimizer."
+                        )
+                    else:
+                        st.caption("No wage data for the selected business.")
+
             # Schedule table
             st.subheader("📅 Optimized Weekly Schedule")
             
@@ -734,7 +891,7 @@ def render_optimization():
             with panel_col:
                 dropped = [
                     e.name for e in st.session_state.employees
-                    if not any(result.schedule[e.name][d] for d in DAYS_OF_WEEK)
+                    if not any(result.schedule[e.uid][d] for d in DAYS_OF_WEEK)
                 ]
                 st.markdown(f"**Dropped ({len(dropped)})**")
                 st.caption("\n".join(f"• {n}" for n in dropped) if dropped else "none")
@@ -742,7 +899,7 @@ def render_optimization():
                 st.markdown("**Active per role**")
                 role_counts = {}
                 for e in st.session_state.employees:
-                    if any(result.schedule[e.name][d] for d in DAYS_OF_WEEK):
+                    if any(result.schedule[e.uid][d] for d in DAYS_OF_WEEK):
                         role_counts[e.role] = role_counts.get(e.role, 0) + 1
                 if role_counts:
                     for role, n in sorted(role_counts.items()):
@@ -750,6 +907,21 @@ def render_optimization():
                 else:
                     st.caption("—")
     
+            # --- Recommendations: plain-language explanation of the schedule's choices ---
+            recs = result.recommendations or []
+            if recs:
+                st.markdown("### 💡 Recommendations")
+                st.caption("Why the schedule looks like this, and what you could change. "
+                           "Quantified in staff-hours/headcount.")
+                _ICON = {'high': '⚠️', 'medium': '🔸', 'low': '·', 'info': 'ℹ️'}
+                _order = {'high': 0, 'medium': 1, 'low': 2, 'info': 3}
+                for r in sorted(recs, key=lambda x: _order.get(x.severity, 9)):
+                    with st.container(border=True):
+                        st.markdown(f"{_ICON.get(r.severity, '•')} **{r.title}**")
+                        if r.detail:
+                            st.caption(r.detail)
+                        if r.suggestion:
+                            st.markdown(f"➡️ {r.suggestion}")
     
         
 # ============================================================================
@@ -777,8 +949,14 @@ def render_schedule_optimizer_page():
     
     render_operating_hours()
     st.divider()
+
+
     render_optimization()
 
+    render_staffing_suggestion()
+    st.divider()
+    
+    
     # Show complete setup summary at bottom
     if ('business_setup' in st.session_state and
         st.session_state.business_setup and

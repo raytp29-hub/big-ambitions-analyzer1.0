@@ -2,8 +2,9 @@
 Schedule Models - Data Classes
 Core data structures for Schedule Optimizer
 """
+import uuid
 from dataclasses import dataclass, field
-from typing import Literal, List, Dict
+from typing import Literal, List, Dict, Optional
 
 # ============================================================================
 # BUILDING
@@ -47,7 +48,11 @@ class Employee:
     role: str                    # e.g., 'Customer Service', 'Cleaning', 'Office Worker'
     hourly_wage: float          # $/hour
     demands: List[Demand] = field(default_factory=list)
-    
+    # Identita' stabile e univoca: usata come chiave dal solver/griglia, cosi'
+    # due dipendenti con lo STESSO nome non si sovrascrivono (il nome resta solo
+    # per la visualizzazione).
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex)
+
     def __str__(self):
         return f"{self.name} ({self.role}) - ${self.hourly_wage:.2f}/h - {len(self.demands)} demands"
     
@@ -81,9 +86,12 @@ class DailySchedule:
     
     @property
     def hours_open(self) -> int:
-        """Calculate total hours open for the day"""
+        """Ore totali di apertura. Gestisce l'overnight (chiusura < apertura,
+        a cavallo della mezzanotte) aggiungendo 24."""
         if not self.is_open:
             return 0
+        if self.end_hour < self.start_hour:
+            return self.end_hour + 24 - self.start_hour
         return self.end_hour - self.start_hour
     
     def __str__(self):
@@ -144,8 +152,14 @@ class OptimizationResult:
     success: bool
     status: str
     total_cost: float
-    total_satisfaction: float
+    total_satisfaction: Optional[float]  # None = N/A (nessuna richiesta tra gli attivi)
     schedule: Dict[str, Dict[str, List[str]]]  # employee -> day -> [shifts]
     daily_shifts: Dict[str, Dict[str, dict]]   # day -> shift_name -> shift_info
     unmet_demands: List[str]
     solver_time: float
+    # Copertura: per ruolo {'real': ore scoperte di vendita/presenza (servono addetti),
+    # 'optional': ore extra non coperte (scelta economica), 'suggest': addetti consigliati}
+    coverage_report: Optional[Dict[str, dict]] = None
+    # Consigli generali derivati dai fatti del solver (lista di Recommendation,
+    # vedi analysis/schedule_advice.py). Testo in inglese per il pannello UI.
+    recommendations: Optional[list] = None

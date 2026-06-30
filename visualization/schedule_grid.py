@@ -14,6 +14,9 @@ ROLE_COLORS = {
     'Customer Service': '#f59e0b',   # arancione (cash register)
     'Cleaning': '#14b8a6',           # teal (cleaning station)
     'Security Guard': '#6366f1',     # indaco
+    'Programmer': '#3b82f6',         # blu
+    'Designer': '#ec4899',           # rosa
+    'Office Worker': '#8b5cf6',      # viola
 }
 _FALLBACK_COLORS = ['#ef4444', '#8b5cf6', '#10b981', '#3b82f6', '#ec4899']
 
@@ -37,38 +40,77 @@ def build_station_rows(selected_furniture: List[Dict]) -> List[Dict]:
     for furn in selected_furniture:
         if not furn.get('is_workstation', False):
             continue
-        skills = furn.get('suitable_skills', [])
+        skills = list(furn.get('suitable_skills', []))
         role = skills[0] if skills else None
         qty = int(furn.get('quantity', 1))
         name = furn.get('name', 'Workstation')
         cap = int(furn.get('unit_capacity', 0))
         for k in range(1, qty + 1):
             station_id = f"{name} #{k}" if qty > 1 else name
-            stations.append({'id': station_id, 'name': name, 'role': role, 'capacity': cap})
+            # `role` = primo skill (per colore/etichetta); `skills` = TUTTI i ruoli
+            # che la postazione puo' ospitare (il match avviene su questi).
+            stations.append({'id': station_id, 'name': name, 'role': role,
+                             'skills': skills, 'capacity': cap})
     return stations
 
 
-def assign_shift_employees(result, employees, stations) -> Dict[Tuple[str, str, str], str]:
+def assign_shift_employees(result, employees, stations) -> Dict[Tuple[str, str], list]:
     """
-    Assegna ogni addetto attivo in un turno a una postazione specifica del suo ruolo
-    (postazioni piu' capienti per prime). Ritorna {(day, shift_name, station_id): emp_name}.
+    Assegna ogni FINESTRA (turno) di un addetto a una postazione del suo ruolo,
+    SENZA sovrapposizioni temporali sulla stessa postazione (interval scheduling).
+    Vale per tutti i ruoli/postazioni.
+
+    Ritorna {(day, station_id): [(start, end, emp_name, role), ...]}.
     """
+    name_of = {e.uid: e.name for e in employees}
+
+    # Una postazione e' disponibile per OGNI ruolo tra i suoi skill (non solo il
+    # primo): cosi' i Programmer/Designer/ecc. trovano i loro banchi anche se la
+    # postazione elenca un altro skill per primo.
     stations_by_role: Dict[str, List[Dict]] = {}
     for st in stations:
-        stations_by_role.setdefault(st['role'], []).append(st)
+        roles = st.get('skills') or ([st['role']] if st.get('role') else [])
+        for role in roles:
+            stations_by_role.setdefault(role, []).append(st)
     for r in stations_by_role:
-        stations_by_role[r].sort(key=lambda s: -s['capacity'])
+        stations_by_role[r].sort(key=lambda s: -s['capacity'])  # piu' capienti per prime
 
-    assignment: Dict[Tuple[str, str, str], str] = {}
+    assignment: Dict[Tuple[str, str], list] = {}
     for day in DAYS_OF_WEEK:
-        for shift_name in result.daily_shifts.get(day, {}).keys():
-            working_by_role: Dict[str, List[str]] = {}
-            for emp in employees:
-                if shift_name in result.schedule.get(emp.name, {}).get(day, []):
-                    working_by_role.setdefault(emp.role, []).append(emp.name)
-            for role, names in working_by_role.items():
-                for emp_name, st in zip(names, stations_by_role.get(role, [])):
-                    assignment[(day, shift_name, st['id'])] = emp_name
+        day_shifts = result.daily_shifts.get(day, {})
+
+        # 1) raccogli le finestre (start, end, emp) per ruolo
+        intervals_by_role: Dict[str, list] = {}
+        for emp in employees:
+            for sid in result.schedule.get(emp.uid, {}).get(day, []):
+                info = day_shifts.get(sid)
+                if not info:
+                    continue
+                intervals_by_role.setdefault(emp.role, []).append(
+                    (info['start'], info['end'], name_of.get(emp.uid, emp.uid), emp.role)
+                )
+
+        # 2) greedy per ruolo: ordina per inizio, metti ogni finestra sulla prima
+        #    postazione libera (ultimo turno finito <= inizio di questa).
+        for role, intervals in intervals_by_role.items():
+            sts = stations_by_role.get(role, [])
+            if not sts:
+                continue
+            last_end = {st['id']: -1 for st in sts}
+            for (s, en, emp, rl) in sorted(intervals, key=lambda iv: iv[0]):
+                placed = False
+                for st in sts:
+                    if last_end[st['id']] <= s:
+                        assignment.setdefault((day, st['id']), []).append((s, en, emp, rl))
+                        last_end[st['id']] = en
+                        placed = True
+                        break
+                if not placed:
+                    # piu' concorrenti delle postazioni (raro: Vincolo A lo limita):
+                    # usa quella che si libera prima.
+                    st = min(sts, key=lambda st: last_end[st['id']])
+                    assignment.setdefault((day, st['id']), []).append((s, en, emp, rl))
+                    last_end[st['id']] = en
     return assignment
 
 
@@ -89,15 +131,10 @@ def build_day_html(day, result, stations, assignment, employees, row_h=46) -> st
     n_hours = max(xmax - xmin, 1)
 
     blocks_by_station: Dict[str, list] = {}
-    for (d, shift_name, station_id), emp in assignment.items():
+    for (d, station_id), blocks in assignment.items():
         if d != day:
             continue
-        info = day_shifts.get(shift_name)
-        if not info:
-            continue
-        blocks_by_station.setdefault(station_id, []).append(
-            (info['start'], info['end'], emp, role_of.get(emp))
-        )
+        blocks_by_station.setdefault(station_id, []).extend(blocks)
 
     cols = f"120px repeat({n_hours}, minmax(0,1fr))"
     p = [f"<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;"
@@ -110,7 +147,7 @@ def build_day_html(day, result, stations, assignment, employees, row_h=46) -> st
     for i in range(n_hours):
         h = xmin + i
         p.append(f"<div style=\"grid-row:1;grid-column:{i+2};text-align:center;"
-                 f"color:#9aa3ad;align-self:center;\">{h:02d}</div>")
+                 f"color:#9aa3ad;align-self:center;\">{h % 24:02d}</div>")
 
     # righe postazioni
     for r, st in enumerate(stations):
@@ -129,7 +166,7 @@ def build_day_html(day, result, stations, assignment, employees, row_h=46) -> st
                 f"flex-direction:column;justify-content:center;overflow:hidden;\">"
                 f"<span style=\"font-weight:600;white-space:nowrap;overflow:hidden;"
                 f"text-overflow:ellipsis;\">{_html.escape(str(emp))}</span>"
-                f"<span style=\"font-size:10px;opacity:0.85;\">{start:02d}–{end:02d}</span>"
+                f"<span style=\"font-size:10px;opacity:0.85;\">{start % 24:02d}–{end % 24:02d}</span>"
                 f"</div>"
             )
 

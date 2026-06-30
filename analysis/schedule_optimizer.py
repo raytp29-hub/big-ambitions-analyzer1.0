@@ -4,7 +4,10 @@ Minimizes wage costs while maximizing employee satisfaction
 """
 
 
+import math
+import uuid
 from operator import lshift
+from collections import defaultdict
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 import pulp
@@ -126,10 +129,11 @@ def classify_shift_type(start_hour: int, end_hour: int) -> str:
     Returns:
         'morning', 'afternoon', or 'night'
     """
-    # Shift type based on START time
-    if start_hour < 12:
+    # Shift type based on START time (mod 24 per i turni overnight: 24->0, 25->1...)
+    h = start_hour % 24
+    if h < 12:
         return 'morning'
-    elif start_hour < 18:
+    elif h < 18:
         return 'afternoon'
     else:
         return 'night'
@@ -225,7 +229,14 @@ def optimize_schedule(
     beta: float = 0.5
 ) -> OptimizationResult:
     """Main optimization function using PuLP."""
-    
+
+    # Normalizza l'identita': i dipendenti creati prima dell'introduzione di
+    # `uid` (o rimasti in session_state da una vecchia classe) potrebbero non
+    # averlo. Glielo assegniamo qui, cosi' il solver ha sempre una chiave univoca.
+    for _emp in employees:
+        if getattr(_emp, 'uid', None) is None:
+            _emp.uid = uuid.uuid4().hex
+
     print("="*60)
     print("SCHEDULE OPTIMIZATION")
     print("="*60)
@@ -271,24 +282,24 @@ def optimize_schedule(
 
 
     for emp in employees:
-        x[emp.name] = {}
+        x[emp.uid] = {}
         
         for day in DAYS_OF_WEEK:
-            x[emp.name][day] = {}
+            x[emp.uid][day] = {}
             
             if day in daily_shifts and daily_shifts[day]:
                 for shift_name in daily_shifts[day].keys():
                     # Create binary variable
-                    var_name = f"x_{emp.name}_{day}_{shift_name}"
-                    x[emp.name][day][shift_name] = pulp.LpVariable(
+                    var_name = f"x_{emp.uid}_{day}_{shift_name}"
+                    x[emp.uid][day][shift_name] = pulp.LpVariable(
                         var_name,
                         cat='Binary'
                     )
     total_vars = sum(
-        len(x[emp.name][day])
+        len(x[emp.uid][day])
         for emp in employees
         for day in DAYS_OF_WEEK
-        if day in x[emp.name]
+        if day in x[emp.uid]
     )
     print(f"✓ Created {total_vars} binary decision variables")
     print(f"  ({len(employees)} employees × {len([d for d in weekly_schedule if d.is_open])} days × ~2 shifts)")        
@@ -302,15 +313,15 @@ def optimize_schedule(
     # y[employee_name] = 1 se il dipendente è ATTIVO questa settimana, 0 se scartato
     y = {}
     for emp in employees:
-        y[emp.name] = pulp.LpVariable(f"y_{emp.name}", cat='Binary')
+        y[emp.uid] = pulp.LpVariable(f"y_{emp.uid}", cat='Binary')
 
     # Collegamento x <= y: se y=0 il dipendente non può lavorare nessun turno
     for emp in employees:
         for day in DAYS_OF_WEEK:
             if day in daily_shifts and daily_shifts[day]:
                 for shift_name in daily_shifts[day].keys():
-                    prob += x[emp.name][day][shift_name] <= y[emp.name], \
-                        f"link_{emp.name}_{day}_{shift_name}"
+                    prob += x[emp.uid][day][shift_name] <= y[emp.uid], \
+                        f"link_{emp.uid}_{day}_{shift_name}"
 
     # Satisfaction points by priority (usati nello Step 5 per il punteggio)
     SATISFACTION_POINTS = {
@@ -322,7 +333,7 @@ def optimize_schedule(
     # Obiettivo: minimizza il costo salariale settimanale.
     # + penalità minima su Σy: a parità di costo, preferisci meno dipendenti attivi.
     total_cost_expr = pulp.lpSum(
-        emp.hourly_wage * shift_info['hours'] * x[emp.name][day][shift_name]
+        emp.hourly_wage * shift_info['hours'] * x[emp.uid][day][shift_name]
         for emp in employees
         for day in DAYS_OF_WEEK
         if day in daily_shifts and daily_shifts[day]
@@ -346,7 +357,7 @@ def optimize_schedule(
     for emp in employees:
         # Calculate total hours worked per week
         total_hours = pulp.lpSum(
-            shift_info['hours'] * x[emp.name][day][shift_name]
+            shift_info['hours'] * x[emp.uid][day][shift_name]
             for day in DAYS_OF_WEEK
             if day in daily_shifts and daily_shifts[day]
             for shift_name, shift_info in daily_shifts[day].items()
@@ -357,15 +368,15 @@ def optimize_schedule(
             if demand.category == 'schedule':
                 if demand.constraint == 'part_time' and demand.priority == 'critical':
                     # Part-time: 10-30 hours/week (condizionato su y: se y=0 nessun minimo)
-                    prob += total_hours >= 10 * y[emp.name], f"{emp.name}_min_part_time"
-                    prob += total_hours <= 30 * y[emp.name], f"{emp.name}_max_part_time"
+                    prob += total_hours >= 10 * y[emp.uid], f"{emp.uid}_min_part_time"
+                    prob += total_hours <= 30 * y[emp.uid], f"{emp.uid}_max_part_time"
                     constraint_count += 2
                     print(f"  ✓ {emp.name}: Part-time (10-30h/week)")
 
                 elif demand.constraint == 'full_time' and demand.priority == 'critical':
                     # Full-time: 30-50 hours/week (condizionato su y)
-                    prob += total_hours >= 30 * y[emp.name], f"{emp.name}_min_full_time"
-                    prob += total_hours <= 50 * y[emp.name], f"{emp.name}_max_full_time"
+                    prob += total_hours >= 30 * y[emp.uid], f"{emp.uid}_min_full_time"
+                    prob += total_hours <= 50 * y[emp.uid], f"{emp.uid}_max_full_time"
                     constraint_count += 2
                     print(f"  ✓ {emp.name}: Full-time (30-50h/week)")
     
@@ -378,22 +389,22 @@ def optimize_schedule(
                 if demand.constraint == 'four_days':
                     # Work max 4 days per week
                     days_worked = pulp.lpSum(
-                        pulp.lpSum(x[emp.name][day][shift_name] for shift_name in daily_shifts[day].keys())
+                        pulp.lpSum(x[emp.uid][day][shift_name] for shift_name in daily_shifts[day].keys())
                         for day in DAYS_OF_WEEK
                         if day in daily_shifts and daily_shifts[day]
                     )
-                    prob += days_worked <= 4, f"{emp.name}_max_four_days"
+                    prob += days_worked <= 4, f"{emp.uid}_max_four_days"
                     constraint_count += 1
                     print(f"  ✓ {emp.name}: Max 4 days/week")
                 
                 elif demand.constraint == 'five_days':
                     # Work max 5 days per week
                     days_worked = pulp.lpSum(
-                        pulp.lpSum(x[emp.name][day][shift_name] for shift_name in daily_shifts[day].keys())
+                        pulp.lpSum(x[emp.uid][day][shift_name] for shift_name in daily_shifts[day].keys())
                         for day in DAYS_OF_WEEK
                         if day in daily_shifts and daily_shifts[day]
                     )
-                    prob += days_worked <= 5, f"{emp.name}_max_five_days"
+                    prob += days_worked <= 5, f"{emp.uid}_max_five_days"
                     constraint_count += 1
                     print(f"  ✓ {emp.name}: Max 5 days/week")
     
@@ -421,7 +432,7 @@ def optimize_schedule(
                 for shift_name, shift_info in daily_shifts[day].items():
                     shift_type = shift_info['type']
                     if shift_type in blocked_shifts:
-                        prob += x[emp.name][day][shift_name] == 0, f"{emp.name}_{day}_{shift_name}_blocked"
+                        prob += x[emp.uid][day][shift_name] == 0, f"{emp.uid}_{day}_{shift_name}_blocked"
                         constraint_count += 1
         
         if blocked_shifts:
@@ -447,7 +458,7 @@ def optimize_schedule(
                 for shift_name, shift_info in daily_shifts[day].items():
                     shift_type = shift_info['type']
                     if shift_type in blocked_shifts:
-                        prob += x[emp.name][day][shift_name] == 0
+                        prob += x[emp.uid][day][shift_name] == 0
                         constraint_count += 1 
         if blocked_shifts:
             print(f"  ✓ {emp.name}: Blocked {list(blocked_shifts.keys())} shifts")
@@ -460,11 +471,11 @@ def optimize_schedule(
         for day in DAYS_OF_WEEK:
             if day in daily_shifts and daily_shifts[day]:
                 turni_day = pulp.lpSum(
-                    x[emp.name][day][shift_name]
+                    x[emp.uid][day][shift_name]
                     for shift_name in daily_shifts[day].keys()
                 )
                 
-                prob += turni_day <= 1, f"{emp.name}_{day}_one_shift_max"
+                prob += turni_day <= 1, f"{emp.uid}_{day}_one_shift_max"
                 constraint_count += 1
     
     
@@ -480,7 +491,7 @@ def optimize_schedule(
                 for weekend_day in ['Saturday', 'Sunday']:
                     if weekend_day in daily_shifts and daily_shifts[weekend_day]:
                         for shift_name in daily_shifts[weekend_day].keys():
-                            prob += x[emp.name][weekend_day][shift_name] == 0, f"{emp.name}_{weekend_day}_{shift_name}_off"
+                            prob += x[emp.uid][weekend_day][shift_name] == 0, f"{emp.uid}_{weekend_day}_{shift_name}_off"
                             constraint_count += 1
                 print(f"  ✓ {emp.name}: Free weekends")
     
@@ -492,7 +503,7 @@ def optimize_schedule(
             for shift_name in daily_shifts[day].keys():
                 # Sum of all employees working this shift <= max_simultaneous
                 employees_in_shift = pulp.lpSum(
-                    x[emp.name][day][shift_name] for emp in employees
+                    x[emp.uid][day][shift_name] for emp in employees
                 )
                 prob += employees_in_shift <= max_simultaneous, f"max_employees_{day}_{shift_name}"
                 constraint_count += 1
@@ -507,7 +518,7 @@ def optimize_schedule(
             for shift_name in daily_shifts[day].keys():
                 # Sum of all employees working this shift >= 1
                 employees_in_shift = pulp.lpSum(
-                    x[emp.name][day][shift_name] for emp in employees
+                    x[emp.uid][day][shift_name] for emp in employees
                 )
                 prob += employees_in_shift >= 1, f"min_coverage_{day}_{shift_name}"
                 constraint_count += 1
@@ -533,7 +544,7 @@ def optimize_schedule(
             if day in daily_shifts and daily_shifts[day]:
                 for shift_name in daily_shifts[day].keys():
                     active_in_role = pulp.lpSum(
-                        x[emp.name][day][shift_name] for emp in role_emps
+                        x[emp.uid][day][shift_name] for emp in role_emps
                     )
                     prob += active_in_role <= n_stations, \
                         f"capacity_{role_key}_{day}_{shift_name}"
@@ -549,23 +560,52 @@ def optimize_schedule(
         business_setup.capacity_limit,
         daily_shifts,
     )
+    role_headcount = {role: len(emps) for role, emps in emps_by_role.items()}
     role_demand = compute_role_demand(
         list(emps_by_role.keys()),
         peak,
         role_stations,
         cleaning_per_shift=cleaning_per_shift,
         headcount_per_shift=security_per_shift,
+        role_headcount=role_headcount,
     )
     for (role, day, shift_name), need in role_demand.items():
         if need <= 0 or role not in emps_by_role:
             continue
         active_in_role = pulp.lpSum(
-            x[emp.name][day][shift_name] for emp in emps_by_role[role]
+            x[emp.uid][day][shift_name] for emp in emps_by_role[role]
         )
         prob += active_in_role >= need, \
             f"demand_{role.replace(' ', '')}_{day}_{shift_name}"
         constraint_count += 1
-    print(f"  ✓ Vincolo B: fabbisogno per ruolo dal flusso clienti")
+    print(f"  ✓ Vincolo B: fabbisogno per ruolo dal flusso clienti [v4 water-fill]")
+
+    # --- Diagnostica pre-solve: individua i colli di bottiglia strutturali -----
+    # Conferma che gira il codice nuovo e segnala perche' sarebbe infeasible.
+    print("  [Diagnostica Vincolo B - fabbisogno vs organico/postazioni]")
+    for role in emps_by_role:
+        hc = role_headcount.get(role, 0)
+        n_st = len(role_stations.get(role, []))
+        per_day = defaultdict(int)
+        per_shift_max = 0
+        for (r, day, sh), need in role_demand.items():
+            if r != role:
+                continue
+            per_day[day] += need
+            per_shift_max = max(per_shift_max, need)
+            if n_st and need > n_st:
+                print(f"    ⚠ {role} {day}/{sh}: need {need} > postazioni {n_st} (Vincolo A blocca)")
+        worst_day = max(per_day.values()) if per_day else 0
+        flag = "OK" if worst_day <= hc else f"⚠ supera organico {hc}"
+        print(f"    {role}: organico={hc}, postazioni={n_st}, "
+              f"max need/turno={per_shift_max}, max need/giorno={worst_day} -> {flag}")
+    # Carico totale richiesto per turno vs max_simultaneous
+    demand_per_shift = defaultdict(int)
+    for (r, day, sh), need in role_demand.items():
+        demand_per_shift[(day, sh)] += need
+    for (day, sh), tot in demand_per_shift.items():
+        if tot > max_simultaneous:
+            print(f"    ⚠ {day}/{sh}: somma fabbisogni ruoli {tot} > max_simultaneous {max_simultaneous}")
 
     # ------------------------------------------------------------------------
     # 4.9: Soddisfazione soft - richieste NON-critical nell'obiettivo
@@ -577,12 +617,12 @@ def optimize_schedule(
 
     for emp in employees:
         hours_e = pulp.lpSum(
-            info['hours'] * x[emp.name][day][sh]
+            info['hours'] * x[emp.uid][day][sh]
             for day in DAYS_OF_WEEK if day in daily_shifts and daily_shifts[day]
             for sh, info in daily_shifts[day].items()
         )
         days_e = pulp.lpSum(
-            x[emp.name][day][sh]
+            x[emp.uid][day][sh]
             for day in DAYS_OF_WEEK if day in daily_shifts and daily_shifts[day]
             for sh in daily_shifts[day]
         )
@@ -592,15 +632,18 @@ def optimize_schedule(
                 continue
 
             points = SATISFACTION_POINTS[demand.priority]
-            tag = f"{emp.name}_{i}".replace(' ', '_')
+            tag = f"{emp.uid}_{i}".replace(' ', '_')
             s = pulp.LpVariable(f"sat_{tag}", cat='Binary')
-            prob += s <= y[emp.name], f"satlink_{tag}"
+            prob += s <= y[emp.uid], f"satlink_{tag}"
             constraint_count += 1
 
             c = demand.constraint
             if c in ('no_morning', 'no_afternoon', 'no_evening', 'no_night', 'no_cleaning', 'free_weekend'):
-                forbidden = _forbidden_shift_sum(emp.name, c, x, daily_shifts)
-                prob += s <= 1 - forbidden, f"satavoid_{tag}"
+                forbidden = _forbidden_shift_sum(emp.uid, c, x, daily_shifts)
+                # Soft corretto: s=1 => forbidden=0 (richiesta soddisfatta);
+                # s=0 => nessun limite (BIG_M la disattiva). NON usare
+                # "s <= 1 - forbidden": forzerebbe forbidden<=1 come vincolo hard.
+                prob += forbidden <= BIG_M * (1 - s), f"satavoid_{tag}"
                 constraint_count += 1
             elif c == 'part_time':
                 prob += hours_e >= 10 * s, f"satptlo_{tag}"
@@ -622,12 +665,12 @@ def optimize_schedule(
             satisfaction_terms.append(points * s)
 
     sat_total = pulp.lpSum(satisfaction_terms)
-    print(f"  ✓ Soddisfazione soft: {len(satisfaction_terms)} richieste non-critical pesate")
+    print(f"  ✓ Soddisfazione soft: {len(satisfaction_terms)} richieste non-critical pesate [v3 soft-avoid-fix]")
 
     # Obiettivo finale: alpha*costo - beta*soddisfazione + spareggio su y.
     prob += (
         alpha * total_cost_expr
-        + 0.01 * pulp.lpSum(y[emp.name] for emp in employees)
+        + 0.01 * pulp.lpSum(y[emp.uid] for emp in employees)
         - beta * sat_total
     ), "objective"
     print(f"  Objective set: alpha*cost - beta*satisfaction (alpha={alpha}, beta={beta})")
@@ -680,20 +723,23 @@ def optimize_schedule(
     schedule = {}  # employee_name → day → [shift_names]
     
     for emp in employees:
-        schedule[emp.name] = {}
+        schedule[emp.uid] = {}
         
         for day in DAYS_OF_WEEK:
-            schedule[emp.name][day] = []
+            schedule[emp.uid][day] = []
             
             if day in daily_shifts and daily_shifts[day]:
                 for shift_name in daily_shifts[day].keys():
                     # Check if variable is 1 (employee works this shift)
-                    if x[emp.name][day][shift_name].varValue == 1:
-                        schedule[emp.name][day].append(shift_name)
+                    if x[emp.uid][day][shift_name].varValue == 1:
+                        schedule[emp.uid][day].append(shift_name)
     
+    # Mappa uid -> nome (i print devono restare leggibili)
+    name_of = {emp.uid: emp.name for emp in employees}
+
     # Print schedule
-    for emp_name, emp_schedule in schedule.items():
-        print(f"\n  {emp_name}:")
+    for emp_uid, emp_schedule in schedule.items():
+        print(f"\n  {name_of.get(emp_uid, emp_uid)}:")
         for day, shifts in emp_schedule.items():
             if shifts:
                 shift_details = []
@@ -714,16 +760,16 @@ def optimize_schedule(
         for day in DAYS_OF_WEEK:
             if day in daily_shifts and daily_shifts[day]:
                 for shift_name in daily_shifts[day].keys():
-                    if x[emp.name][day][shift_name].varValue == 1:
+                    if x[emp.uid][day][shift_name].varValue == 1:
                         shift_hours = daily_shifts[day][shift_name]['hours']
                         total_hours_worked += shift_hours
                         actual_cost += emp.hourly_wage * shift_hours
         
-        employee_hours[emp.name] = total_hours_worked
+        employee_hours[emp.uid] = total_hours_worked
     
     print(f"\n[Cost breakdown:]")
     for emp in employees:
-        hours = employee_hours[emp.name]
+        hours = employee_hours[emp.uid]
         cost = emp.hourly_wage * hours
         print(f"  {emp.name}: {hours}h @ ${emp.hourly_wage}/h = ${cost:.2f}")
     
@@ -766,7 +812,7 @@ def optimize_schedule(
     max_possible_satisfaction = 0
     
     for emp in employees:
-        emp_schedule = schedule[emp.name]
+        emp_schedule = schedule[emp.uid]
         total_hours = calculate_total_hours(emp_schedule, daily_shifts)
         giorni_lavorativi = count_working_days(emp_schedule)
 
@@ -811,7 +857,7 @@ def optimize_schedule(
                 
                     
             elif demand.constraint == 'free_weekend':
-                if not schedule[emp.name]['Saturday'] and not schedule[emp.name]['Sunday']:
+                if not schedule[emp.uid]['Saturday'] and not schedule[emp.uid]['Sunday']:
                     is_satisfied = True
 
             
@@ -876,4 +922,499 @@ def optimize_schedule(
         daily_shifts=daily_shifts,
         unmet_demands=[],
         solver_time=solver_time
+    )
+
+
+# ============================================================================
+# NUOVO MODELLO: TURNI A LUNGHEZZA VARIABILE (domanda oraria)
+# ============================================================================
+
+def optimize_schedule_variable(
+    business_setup,
+    employees,
+    weekly_schedule,
+    max_simultaneous,
+    selected_furniture=None,
+    cleaning_per_shift: int = 1,
+    security_per_shift: int = 1,
+    alpha: float = 1.0,
+    beta: float = 0.5,
+    max_shift_len: int = 8,
+    customers_per_guard: int = 0,
+) -> OptimizationResult:
+    """Solver a TURNI VARIABILI.
+
+    Ogni dipendente/giorno sceglie UNA finestra contigua (durata tra la durata
+    del picco clienti e `max_shift_len`). La domanda e' calcolata per ORA dalla
+    curva di gioco; il monte ore settimanale e' un vincolo HARD per contratto
+    (full 30-50, part 10-30, altrimenti <=50). Floor di 1 CS per ogni ora aperta
+    (niente buchi di vendita).
+    """
+    import time
+    from analysis.schedule_constraints import (
+        get_role_workstations, hours_range, peak_duration,
+        generate_shift_templates, compute_hourly_role_demand,
+    )
+
+    # uid safety (oggetti vecchi in session_state)
+    for _e in employees:
+        if getattr(_e, 'uid', None) is None:
+            _e.uid = uuid.uuid4().hex
+
+    print("=" * 60)
+    print("SCHEDULE OPTIMIZATION — turni variabili [v6: security-picco + soddisfazione]")
+    print("=" * 60)
+    print(f"Employees: {len(employees)} | capacity: {business_setup.capacity_limit}/h "
+          f"| max simultaneous: {max_simultaneous}")
+
+    # --- ore di apertura per giorno ---
+    open_hours = {}
+    for d in weekly_schedule:
+        open_hours[d.day_name] = hours_range(d.start_hour, d.end_hour) if d.is_open else []
+    open_days = [day for day in DAYS_OF_WEEK if open_hours.get(day)]
+
+    # --- template di turno per giorno (min = durata picco, max = max_shift_len) ---
+    templates = {}
+    for day in open_days:
+        hrs = open_hours[day]
+        start, end = hrs[0], hrs[-1] + 1
+        min_len = peak_duration(business_setup.business_name, hrs)
+        templates[day] = generate_shift_templates(start, end, min_len, max_shift_len)
+        print(f"  {day}: {start % 24}-{end % 24} ({len(hrs)}h) | min turno {min_len}h "
+              f"| {len(templates[day])} template")
+
+    role_stations = get_role_workstations(selected_furniture or [])
+    emps_by_role = {}
+    for e in employees:
+        emps_by_role.setdefault(e.role, []).append(e)
+    role_headcount = {r: len(es) for r, es in emps_by_role.items()}
+
+    # banda oraria contrattuale per dipendente (hard) e capacita' erogabile per ruolo
+    def band(e):
+        cons = {d.constraint for d in e.demands if d.category == 'schedule'}
+        if 'full_time' in cons:
+            return (30, 50)
+        if 'part_time' in cons:
+            return (10, 30)
+        return (0, 50)
+
+    def emp_max_hours(e):
+        return min(band(e)[1], len(open_days) * max_shift_len, 50)
+
+    role_capacity = {
+        role: sum(emp_max_hours(e) for e in es) for role, es in emps_by_role.items()
+    }
+
+    demand, demand_info, econ = compute_hourly_role_demand(
+        business_setup.business_name,
+        business_setup.capacity_limit,
+        {day: open_hours[day] for day in open_days},
+        role_stations,
+        role_headcount,
+        cleaning_per_shift=cleaning_per_shift,
+        security_per_shift=security_per_shift,
+        max_shift_len=max_shift_len,
+        role_capacity=role_capacity,
+        customers_per_guard=customers_per_guard,
+    )
+
+    prob = pulp.LpProblem("Schedule_Variable", pulp.LpMinimize)
+
+    # --- variabili: x[uid][day][ti] scelta del template, y[uid] attivo ---
+    x = {}
+    for e in employees:
+        x[e.uid] = {}
+        for day in open_days:
+            x[e.uid][day] = {
+                ti: pulp.LpVariable(f"x_{e.uid}_{day}_{ti}", cat='Binary')
+                for ti in range(len(templates[day]))
+            }
+    y = {e.uid: pulp.LpVariable(f"y_{e.uid}", cat='Binary') for e in employees}
+
+    # un turno/giorno + link a y
+    for e in employees:
+        for day in open_days:
+            prob += pulp.lpSum(x[e.uid][day].values()) <= y[e.uid], f"one_{e.uid}_{day}"
+
+    def covering(day, h):
+        return [ti for ti, (s, en) in enumerate(templates[day]) if s <= h < en]
+
+    # copertura per ORA con SLACK + Vincolo A + max sim. La copertura non e' hard:
+    # se l'organico non basta si lascia scoperto (slack>0) invece di Infeasible.
+    # SLACK ECONOMICO per il ruolo di vendita: il floor di 1 (no buchi) ha penalita'
+    # ALTA, mentre il CS EXTRA sopra il floor e' penalizzato col valore economico
+    # (profitto/cliente × clienti serviti) -> lo aggiunge solo se rende piu' del salario.
+    BIG_PEN = 10000.0       # floor vendita / vendita senza profitto noto: copri quasi sempre
+    PRESENCE_PEN = 200.0    # presenza (security/cleaning): copri se l'organico lo consente
+    slack_report = []       # (role, var) per il report scopertura
+    slack_pen_terms = []    # termini di penalita' per l'obiettivo
+    for day in open_days:
+        for h in open_hours[day]:
+            cov = covering(day, h)
+            tag_h = f"{day}_{h}"
+            prob += pulp.lpSum(
+                x[e.uid][day][ti] for e in employees for ti in cov
+            ) <= max_simultaneous, f"maxsim_{tag_h}"
+            for role, es in emps_by_role.items():
+                rk = role.replace(' ', '')
+                present = pulp.lpSum(x[e.uid][day][ti] for e in es for ti in cov)
+                need = demand.get((role, day, h), 0)
+                n_st = len(role_stations.get(role, []))
+                if need > 0:
+                    selling = demand_info.get(role, {}).get('selling', False)
+                    ev = econ.get((role, day, h), 0.0)
+                    if selling and ev > 0:
+                        # floor di 1 protetto (penalita' alta) -> gap REALE
+                        s_floor = pulp.LpVariable(f"slkF_{rk}_{tag_h}", lowBound=0)
+                        prob += present + s_floor >= 1, f"covF_{rk}_{tag_h}"
+                        slack_pen_terms.append(BIG_PEN * s_floor)
+                        slack_report.append((role, s_floor, 'real'))
+                        extra = need - 1
+                        if extra > 0:
+                            # CS extra: penalita' = valore economico -> gap OPZIONALE (margine)
+                            s_extra = pulp.LpVariable(
+                                f"slkE_{rk}_{tag_h}", lowBound=0, upBound=extra
+                            )
+                            prob += present + s_floor + s_extra >= need, f"covE_{rk}_{tag_h}"
+                            slack_pen_terms.append(ev * s_extra)
+                            slack_report.append((role, s_extra, 'optional'))
+                    else:
+                        # presenza (o vendita senza profitto noto): slack unico -> gap REALE
+                        pen = BIG_PEN if selling else PRESENCE_PEN
+                        u = pulp.LpVariable(f"slk_{rk}_{tag_h}", lowBound=0)
+                        prob += present + u >= need, f"cov_{rk}_{tag_h}"
+                        slack_pen_terms.append(pen * u)
+                        slack_report.append((role, u, 'real'))
+                if n_st > 0:
+                    prob += present <= n_st, f"capA_{rk}_{tag_h}"
+
+    # --- monte ore HARD per dipendente (band() definita sopra) ---
+    H = {}
+    for e in employees:
+        H[e.uid] = pulp.lpSum(
+            (en - s) * x[e.uid][day][ti]
+            for day in open_days
+            for ti, (s, en) in enumerate(templates[day])
+        )
+        lo, hi = band(e)
+        prob += H[e.uid] <= hi * y[e.uid], f"hmax_{e.uid}"
+        if lo > 0:
+            prob += H[e.uid] >= lo * y[e.uid], f"hmin_{e.uid}"
+
+    # --- soddisfazione SOFT (richieste non-critical 'schedule') nell'obiettivo ---
+    # part/full sono gia' HARD (banda); qui premiamo avoid (no_morning...) e days.
+    # I pesi sono in SCALA DOLLARI (non "punti"): un Important pesa 800 cosi' che,
+    # anche dopo il fattore beta, violarlo costi piu' del risparmio salariale di un
+    # tipico turno -> "quasi sempre rispettato" ma ancora cedibile se il risparmio
+    # e' enorme (es. evitare di attivare un dipendente intero). nice_to_have resta
+    # debole. Il punteggio % di soddisfazione (report) usa SATP, qui invariato.
+    SOFT_PEN = {'important': 800, 'nice_to_have': 80}
+    BIG_M = 60
+    tmpl_type = {
+        day: [classify_shift_type(s, en) for (s, en) in templates[day]]
+        for day in open_days
+    }
+    AVOID_TYPES = {
+        'no_morning': {'morning'},
+        'no_afternoon': {'afternoon'},
+        'no_evening': {'afternoon', 'night'},
+        'no_night': {'night'},
+        'no_cleaning': {'night'},
+    }
+
+    # --- vincoli HARD per le richieste 'schedule' CRITICAL ---------------------
+    # full_time/part_time sono gia' hard via band(). Tutto il resto (free_weekend,
+    # four/five_days, no_morning/...) nel vecchio optimize_schedule era hard ma in
+    # questo solver a turni variabili NON era enforced affatto (il loop soft fa
+    # `continue` sui critical). Lo aggiungiamo qui: un Critical e' inviolabile.
+    n_hard_crit = 0
+    for e in employees:
+        days_e_hard = pulp.lpSum(
+            x[e.uid][day][ti]
+            for day in open_days for ti in range(len(templates[day]))
+        )
+        for dm in e.demands:
+            if dm.category != 'schedule' or dm.priority != 'critical':
+                continue
+            c = dm.constraint
+            if c in ('full_time', 'part_time'):
+                continue  # gia' garantito dalla banda hard
+            if c in AVOID_TYPES:
+                for day in open_days:
+                    for ti in range(len(templates[day])):
+                        if tmpl_type[day][ti] in AVOID_TYPES[c]:
+                            prob += x[e.uid][day][ti] == 0, \
+                                f"hardavoid_{e.uid}_{c}_{day}_{ti}"
+                            n_hard_crit += 1
+            elif c == 'free_weekend':
+                for day in ('Saturday', 'Sunday'):
+                    if day in open_days:
+                        for ti in range(len(templates[day])):
+                            prob += x[e.uid][day][ti] == 0, \
+                                f"hardwknd_{e.uid}_{day}_{ti}"
+                            n_hard_crit += 1
+            elif c == 'four_days':
+                prob += days_e_hard <= 4, f"hard4d_{e.uid}"
+                n_hard_crit += 1
+            elif c == 'five_days':
+                prob += days_e_hard <= 5, f"hard5d_{e.uid}"
+                n_hard_crit += 1
+    if n_hard_crit:
+        print(f"  ✓ Vincoli HARD critical (no-weekend/giorni/turni): {n_hard_crit}")
+
+    sat_terms = []
+    for e in employees:
+        days_e = pulp.lpSum(
+            x[e.uid][day][ti]
+            for day in open_days for ti in range(len(templates[day]))
+        )
+        for i, dm in enumerate(e.demands):
+            if dm.category != 'schedule' or dm.priority == 'critical':
+                continue
+            if dm.constraint in ('full_time', 'part_time'):
+                continue  # gia' garantite dalla banda hard
+            pts = SOFT_PEN.get(dm.priority, 0)
+            tag = f"{e.uid}_{i}"
+            sv = pulp.LpVariable(f"sat_{tag}", cat='Binary')
+            prob += sv <= y[e.uid], f"satlink_{tag}"
+            c = dm.constraint
+            if c in AVOID_TYPES:
+                forbidden = pulp.lpSum(
+                    x[e.uid][day][ti]
+                    for day in open_days
+                    for ti in range(len(templates[day]))
+                    if tmpl_type[day][ti] in AVOID_TYPES[c]
+                )
+                prob += forbidden <= BIG_M * (1 - sv), f"satavoid_{tag}"
+            elif c == 'free_weekend':
+                forbidden = pulp.lpSum(
+                    x[e.uid][day][ti]
+                    for day in ('Saturday', 'Sunday') if day in open_days
+                    for ti in range(len(templates[day]))
+                )
+                prob += forbidden <= BIG_M * (1 - sv), f"satwknd_{tag}"
+            elif c == 'four_days':
+                prob += days_e <= 4 + BIG_M * (1 - sv), f"sat4_{tag}"
+            elif c == 'five_days':
+                prob += days_e <= 5 + BIG_M * (1 - sv), f"sat5_{tag}"
+            else:
+                continue
+            sat_terms.append(pts * sv)
+
+    # --- obiettivo: PRIMA copri (penalita' alta su scopertura), poi minimizza costo,
+    #     a parita' premia la soddisfazione (beta) ---
+    cost_expr = pulp.lpSum(
+        e.hourly_wage * (en - s) * x[e.uid][day][ti]
+        for e in employees
+        for day in open_days
+        for ti, (s, en) in enumerate(templates[day])
+    )
+    prob += (
+        alpha * cost_expr
+        + 0.01 * pulp.lpSum(y.values())
+        + pulp.lpSum(slack_pen_terms)
+        - beta * pulp.lpSum(sat_terms)
+    ), "objective"
+
+    # --- diagnostica pre-solve: domanda ideale vs capata all'organico ---
+    _ppc = next(iter(demand_info.values()), {}).get('ppc', 0.0)
+    print(f"  [Profitto/cliente stimato: ${_ppc:.2f} -> slack CS extra valutato economicamente]"
+          if _ppc > 0 else "  [Profitto/cliente non disponibile -> slack a penalita' piatta]")
+    print("  [Diagnostica copertura oraria vs organico]")
+    for role, hc in role_headcount.items():
+        n_st = len(role_stations.get(role, []))
+        di = demand_info.get(role, {})
+        tag = "vendita" if di.get('selling') else "presenza"
+        ideal = di.get('ideal', 0)
+        assigned = di.get('assigned', 0)
+        cap_hours = di.get('cap', 0)
+        unc = di.get('uncovered', 0)
+        note = "piena" if ideal <= cap_hours else f"CAPATA a {cap_hours}h"
+        warn = f" | ⚠ {unc} ore senza copertura" if unc else ""
+        print(f"    {role} ({tag}): organico={hc} postazioni={n_st} | "
+              f"ideale={ideal}h assegnate={assigned}h (cap {cap_hours}h) -> {note}{warn}")
+    print("  [Banda ore per dipendente]")
+    for e in employees:
+        lo, hi = band(e)
+        print(f"    {e.name} [{e.role}]: banda {lo}-{hi}h, max erogabili {emp_max_hours(e)}h")
+
+    # --- solve ---
+    # timeLimit OBBLIGATORIO: senza, CBC puo' restare nel branch-and-bound quasi
+    # all'infinito sui modelli piu' duri (es. security continua + scaling = molti
+    # vincoli di copertura + slack). Col limite, CBC ritorna la MIGLIORE soluzione
+    # intera trovata (incumbent) anche se non prova l'ottimalita'.
+    SOLVE_TIME_LIMIT = 45  # secondi
+    t0 = time.time()
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=SOLVE_TIME_LIMIT))
+    solver_time = time.time() - t0
+
+    # Accetta anche un incumbent feasible non provato ottimo (timeout): le variabili
+    # hanno comunque un valore. Scarta solo Infeasible/Unbounded o assenza di soluzione.
+    has_incumbent = any(v.varValue is not None for v in y.values())
+    proven_optimal = (status == pulp.LpStatusOptimal)
+    usable = proven_optimal or (
+        status not in (pulp.LpStatusInfeasible, pulp.LpStatusUnbounded)
+        and has_incumbent
+    )
+    if not usable:
+        print(f"✗ {pulp.LpStatus[status]}")
+        return OptimizationResult(
+            success=False, status=pulp.LpStatus[status], total_cost=0.0,
+            total_satisfaction=None, schedule={},
+            daily_shifts={day: {} for day in DAYS_OF_WEEK},
+            unmet_demands=[], solver_time=solver_time,
+        )
+    if proven_optimal:
+        print(f"✓ Optimal in {solver_time:.2f}s")
+    else:
+        print(f"⏱ Time limit ({SOLVE_TIME_LIMIT}s): uso la migliore soluzione trovata "
+              f"(non provata ottima) [{pulp.LpStatus[status]}]")
+
+    # --- report scopertura: gap REALI (servono addetti) vs OPZIONALI (margine) ---
+    real_gaps, opt_gaps = {}, {}
+    for role, u, kind in slack_report:
+        v = u.varValue or 0
+        if v > 1e-6:
+            (opt_gaps if kind == 'optional' else real_gaps)[role] = \
+                (opt_gaps if kind == 'optional' else real_gaps).get(role, 0.0) + v
+
+    per_emp_cap = min(50, len(open_days) * max_shift_len) or 1
+    coverage_report = {}
+    for role in set(real_gaps) | set(opt_gaps):
+        r = real_gaps.get(role, 0.0)
+        o = opt_gaps.get(role, 0.0)
+        coverage_report[role] = {
+            'real': r,
+            'optional': o,
+            'suggest': int(math.ceil(r / per_emp_cap)) if r > 1e-6 else 0,
+        }
+
+    if real_gaps:
+        print("  ⚠ Gap REALI (servono addetti):")
+        for role, v in sorted(real_gaps.items()):
+            print(f"      {role}: {v:.0f}h scoperte -> ~+{coverage_report[role]['suggest']} addetti")
+    if opt_gaps:
+        print("  ℹ Copertura extra non coperta (margine, opzionale):")
+        for role, v in sorted(opt_gaps.items()):
+            print(f"      {role}: {v:.0f}h -> potresti servire piu' clienti con piu' addetti")
+    if not real_gaps and not opt_gaps:
+        print("  Copertura piena: nessuna ora scoperta")
+
+    # --- estrazione: daily_shifts + schedule dalle finestre scelte ---
+    daily_shifts = {day: {} for day in DAYS_OF_WEEK}
+    schedule = {e.uid: {day: [] for day in DAYS_OF_WEEK} for e in employees}
+
+    for e in employees:
+        for day in open_days:
+            for ti, (s, en) in enumerate(templates[day]):
+                if x[e.uid][day][ti].varValue == 1:
+                    sid = f"{s:02d}-{en:02d}"
+                    daily_shifts[day][sid] = {
+                        'start': s, 'end': en, 'hours': en - s,
+                        'type': classify_shift_type(s, en),
+                    }
+                    schedule[e.uid][day].append(sid)
+
+    # --- costo e ore ---
+    actual_cost = 0.0
+    print("\n[Schedule]")
+    for e in employees:
+        worked = []
+        h_tot = 0
+        for day in open_days:
+            for sid in schedule[e.uid][day]:
+                info = daily_shifts[day][sid]
+                h_tot += info['hours']
+                worked.append(f"{day[:3]} {info['start'] % 24:02d}-{info['end'] % 24:02d}")
+        actual_cost += e.hourly_wage * h_tot
+        if worked:
+            print(f"  {e.name} [{e.role}] {h_tot}h @ ${e.hourly_wage}/h: {', '.join(worked)}")
+        else:
+            print(f"  {e.name} [{e.role}]: scartato")
+    print(f"\n  Total weekly cost: ${actual_cost:.2f}")
+
+    # --- soddisfazione (richieste 'schedule' valutate sullo schedule realizzato) ---
+    def types_worked(uid):
+        return {daily_shifts[d][sid]['type'] for d in open_days for sid in schedule[uid][d]}
+
+    def days_worked(uid):
+        return sum(1 for d in DAYS_OF_WEEK if schedule[uid][d])
+
+    SATP = {'critical': 100, 'important': 80, 'nice_to_have': 50}
+    total_sat = 0
+    max_sat = 0
+    unmet_soft = []  # (uid, nome, constraint, priorita', punti) richieste schedule non soddisfatte
+    for e in employees:
+        if days_worked(e.uid) == 0:
+            continue
+        tw = types_worked(e.uid)
+        hrs = sum(daily_shifts[d][sid]['hours'] for d in open_days for sid in schedule[e.uid][d])
+        for dm in e.demands:
+            if dm.category != 'schedule':
+                continue
+            pts = SATP[dm.priority]
+            max_sat += pts
+            c = dm.constraint
+            ok = False
+            if c == 'full_time':
+                ok = 30 <= hrs <= 50
+            elif c == 'part_time':
+                ok = 10 <= hrs <= 30
+            elif c == 'four_days':
+                ok = days_worked(e.uid) <= 4
+            elif c == 'five_days':
+                ok = days_worked(e.uid) <= 5
+            elif c == 'free_weekend':
+                ok = (not schedule[e.uid]['Saturday']) and (not schedule[e.uid]['Sunday'])
+            elif c == 'no_morning':
+                ok = 'morning' not in tw
+            elif c == 'no_afternoon':
+                ok = 'afternoon' not in tw
+            elif c == 'no_night':
+                ok = 'night' not in tw
+            elif c == 'no_evening':
+                ok = ('afternoon' not in tw) and ('night' not in tw)
+            elif c == 'no_cleaning':
+                ok = 'night' not in tw
+            if ok:
+                total_sat += pts
+            else:
+                unmet_soft.append((e.uid, e.name, c, dm.priority, pts))
+    sat_pct = (total_sat / max_sat * 100) if max_sat > 0 else None
+    print(f"  Satisfaction: {'N/A' if sat_pct is None else f'{sat_pct:.1f}%'} "
+          f"({total_sat}/{max_sat})")
+    # Quali richieste hanno fatto perdere punti (i critical qui non compaiono mai:
+    # sono hard). Ti dice esattamente da dove arriva il % mancante.
+    if unmet_soft:
+        print(f"  Richieste NON soddisfatte ({sum(t[-1] for t in unmet_soft)} punti persi):")
+        for _uid, name, c, prio, pts in unmet_soft:
+            print(f"    - {name}: {c} ({prio}, -{pts})")
+
+    # --- consigli generali (dai soli fatti del solver, testo EN per la UI) ---
+    from analysis.schedule_advice import build_recommendations, format_console
+    recommendations = build_recommendations(
+        employees=employees,
+        schedule=schedule,
+        demand=demand,
+        demand_info=demand_info,
+        coverage_report=coverage_report,
+        unmet_soft=unmet_soft,
+        open_days=open_days,
+        open_hours=open_hours,
+        max_shift_len=max_shift_len,
+        business_name=business_setup.business_name,
+        econ=econ,
+        ppc=_ppc,
+    )
+    for _ln in format_console(recommendations):
+        print(_ln)
+
+    unmet_list = [f"{role}: {v:.0f}h" for role, v in sorted(real_gaps.items())]
+    return OptimizationResult(
+        success=True, status=("Optimal" if proven_optimal else "Feasible (time-limited)"),
+        total_cost=actual_cost,
+        total_satisfaction=sat_pct, schedule=schedule, daily_shifts=daily_shifts,
+        unmet_demands=unmet_list, solver_time=solver_time,
+        coverage_report=coverage_report,
+        recommendations=recommendations,
     )

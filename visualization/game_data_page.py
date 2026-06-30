@@ -138,6 +138,15 @@ def _render_demand_curves():
         key="demand_business_select",
     )
 
+    # --- Posizioni dipendenti del business (ruoli assumibili) ---
+    if selected_business:
+        roles = get_employee_roles_for_business(selected_business.replace(' ', ''))
+        if roles:
+            st.markdown(
+                "**👥 Employee roles:** "
+                + "  ".join(f"`{r}`" for r in roles)
+            )
+
     # --- HEATMAP for selected business ---
     if selected_business:
         internal = selected_business.replace(' ', '')

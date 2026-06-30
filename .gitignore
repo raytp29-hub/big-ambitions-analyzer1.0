@@ -49,6 +49,8 @@ ENV/
 .coverage
 htmlcov/
 .tox/
+requirements_backup.txt
+/test_*.py
 
 # Logs
 *.log
