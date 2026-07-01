@@ -125,8 +125,17 @@ streamlit run app.py
 ![Operating Hours](screenshots/21.png)
 *Setup your operating business hours*
 
-### Optimization
-![Schedule Optimizer](screenshots/25.png)
+### Optimization and Wage Cost 
+![Schedule Optimizer](screenshots/25a.png)
+
+### Optmized Weekly Schedule
+![Schedule Optimizer](screenshots/25b.png)
+
+
+![Schedule Optimizer](screenshots/25c.png)
+
+### Recommendations
+![Schedule Optimizer](screenshots/25d.png)
 *Final schedule result*
 
 ### Business Health Check
