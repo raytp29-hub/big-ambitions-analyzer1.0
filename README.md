@@ -134,6 +134,9 @@ streamlit run app.py
 
 ![Schedule Optimizer](screenshots/25c.png)
 
+### Comparison of wage costs with your current employee scheduling
+![Schedule Optimizer](screenshots/25e.png)
+
 ### Recommendations
 ![Schedule Optimizer](screenshots/25d.png)
 *Final schedule result*
