@@ -41,7 +41,7 @@ Built to solve the challenge of manually tracking profits and optimizing employe
   - Working hour limits
 - Accounts for business capacity (furniture/workstations)
 - Maximizes employee satisfaction while meeting coverage requirements
-- **Solves in under 1 second** for realistic scenarios
+
 
 ### ⚡ Additional Features
 - Browser-based processing (no data storage)
