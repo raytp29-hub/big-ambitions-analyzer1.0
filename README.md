@@ -81,81 +81,90 @@ streamlit run app.py
 
 ## 📸 Screenshots
 
-### Upload Files
+A guided tour, in the order you'll actually use the app: import your data, explore the analyses, then build an optimized staff schedule.
+
+### Getting started
+
+**1. Upload your data**
 ![Upload Files](screenshots/1.png)
-*Main interface with transaction upload and navigation*
+*Start here. Drag your Big Ambitions transaction export (CSV or XLSM) into the sidebar uploader — you upload once and every module reads from it. Make sure the game was set to English before exporting.*
 
-### Overview
+**2. Dashboard overview**
 ![Overview](screenshots/2.png)
-*Main interface with transaction upload and navigation*
+*A one-glance summary of revenue, costs and profit across your businesses, plus the weekly wage baseline the schedule optimizer compares against later.*
 
-### P&L Analysis
+**3. Profit & Loss analysis**
 ![P&L Analysis](screenshots/3.png)
-*Detailed profit and loss breakdown by category*
+*Profit and loss broken down by product and category, with every transaction auto-categorized. Sort and filter to see what really drives — or drains — your margin, then export to CSV.*
 
-### Business Setup
+### Schedule Optimizer — step by step
+
+**4. Business setup**
 ![Business Setup](screenshots/10.png)
-*Business Setup*
+*Open the Schedule Optimizer and start by describing the business you want to staff.*
 
-### Business Category
+**5. Pick the business category**
 ![Business Category](screenshots/11.png)
-*Business Category*
+*Choose the category — this loads the matching building sizes, furniture and employee roles straight from the game data.*
 
-### Building Size
+**6. Choose the building size**
 ![Building Size](screenshots/12.png)
-*Choose size of building*
+*Select your building size and version. It sets the customer capacity per hour, which drives how much staff each shift needs.*
 
-### Furniture Selection
+**7. Select your furniture**
 ![Furniture Selection](screenshots/13.png)
-*Furniture selection*
+*Add the furniture you own. Workstations (cash registers, guard lockers, cleaning stations) decide how many people of each role can work at the same time.*
 
-### Capacity Analysis
+**8. Review customer capacity**
 ![Capacity Analysis](screenshots/14.png)
-*Analyze your customer capacity according to your furniture*
+*Check the effective customer capacity your furniture supports — the optimizer combines this with the game's hourly demand curve to size every shift.*
 
-### Employee Details
+**9. Add your employees**
 ![Employee Details](screenshots/16.png)
-*Setup your Employees*
+*Enter each employee with their role and hourly wage.*
 
-### Employees Demands
+**10. Set employee requests**
 ![Employees Demands](screenshots/17.png)
-*Select demands of employee*
+*Add each employee's requests (part/full-time, days off, no-weekend, shift preferences) and mark them Critical (always respected) or Important (respected when affordable).*
 
-### Operating Hours
+**11. Set operating hours**
 ![Operating Hours](screenshots/21.png)
-*Setup your operating business hours*
+*Define your weekly opening hours per day. Closed days and overnight hours are handled automatically.*
 
-### Optimization of Wage Costs and Total Employee Satisfaction 
-![Schedule Optimizer](screenshots/25a.png)
+**12. Run the optimization**
+![Wage cost and satisfaction](screenshots/25a.png)
+*Launch the solver: it minimizes weekly wage cost while honoring your constraints, and reports the total cost and an employee-satisfaction score.*
 
-### Optmized Weekly Schedule
-![Schedule Optimizer](screenshots/25b.png)
+**13. Your optimized weekly schedule**
+![Weekly schedule grid](screenshots/25b.png)
+![Weekly schedule grid, continued](screenshots/25c.png)
+*The result as a game-style grid — who works which station and which hours, day by day.*
 
+**14. Compare against your current staffing**
+![Wage cost comparison](screenshots/25e.png)
+*See the planned wage cost next to your current in-game staffing (from the data you imported) to gauge the savings.*
 
-![Schedule Optimizer](screenshots/25c.png)
-
-### Comparison of wage costs with your current employee scheduling
-![Schedule Optimizer](screenshots/25e.png)
-
-### Recommendations
-![Schedule Optimizer](screenshots/25d.png)
-*Final schedule result*
-
-### Business Health Check
-![Schedule Optimizer](screenshots/hc.png)
-*Business health check*
+**15. Recommendations**
+![Recommendations](screenshots/25d.png)
+*Plain-language advice explains the schedule's trade-offs — unmet requests, understaffed roles, employees left unscheduled, and where hiring or trimming hours would help.*
 
 ### Business Health Check
-![Schedule Optimizer](screenshots/hc2.png)
-*Business health check details*
 
-### Business Health Check - Heatmap
-![Schedule Optimizer](screenshots/hc4.png)
-*Business health check heatmap*
+**16. Health score**
+![Business Health Check](screenshots/hc.png)
+*A quick score of how well your setup matches the game's demand across staffing, hours and furniture.*
 
-### Business Health Check - Performance
-![Schedule Optimizer](screenshots/hc5.png)
-*Business health check performance*
+**17. Detailed breakdown**
+![Health check details](screenshots/hc2.png)
+*The score explained area by area, with concrete fixes to apply in-game.*
+
+**18. Demand heatmap**
+![Health check heatmap](screenshots/hc4.png)
+*When customers actually show up across the week — use it to line up your opening hours and staffing with real traffic.*
+
+**19. Performance view**
+![Health check performance](screenshots/hc5.png)
+*Your results measured against the expected potential for that business.*
 
 ---
 
