@@ -292,15 +292,30 @@ def _render_product_margins():
     products = get_all_products_with_margins()
 
     # Filters
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         categories = ['All'] + [c for c in get_business_categories() if c not in _EXCLUDED_CATEGORIES]
         cat_filter = st.selectbox("Category", categories, key="margin_cat")
     with col2:
+        # Business options depend on the selected category
+        if cat_filter != 'All':
+            biz_options = sorted(
+                format_item_name(b)
+                for b in get_businesses_for_category(cat_filter)
+                if b != 'Headquarter'
+            )
+        else:
+            biz_options = _build_business_list()
+        biz_filter = st.selectbox(
+            "Business",
+            ['All'] + biz_options,
+            key=f"margin_biz_{cat_filter}",  # key per category -> resets on category change
+        )
+    with col3:
         sort_by = st.selectbox("Sort by", [
             "Margin ($)", "Margin (%)", "Market Price", "Wholesale Price"
         ], key="margin_sort")
-    with col3:
+    with col4:
         show_impact = st.checkbox("Show Impact", value=True, key="margin_impact")
 
     # Build business list for selected category
@@ -314,7 +329,11 @@ def _render_product_margins():
     # Filter products
     filtered = []
     for p in products:
-        if biz_in_cat is not None:
+        if biz_filter != 'All':
+            # Single business selected: keep only its products
+            if not any(b['business'] == biz_filter for b in p['businesses']):
+                continue
+        elif biz_in_cat is not None:
             if not any(b['business'] in biz_in_cat for b in p['businesses']):
                 continue
         filtered.append(p)
@@ -324,11 +343,20 @@ def _render_product_margins():
         return
 
     # Build DataFrame
+    # With a single business selected, show ITS impact value (not the average
+    # across all shops that sell the product)
+    impact_col = 'Impact' if biz_filter != 'All' else 'Avg Impact'
     rows = []
     for p in filtered:
         display_name = _display_product_name(p['internal_name'], p['name'])
         biz_names = ', '.join(b['business'] for b in p['businesses'])
-        avg_impact = sum(b['impact'] for b in p['businesses']) / len(p['businesses'])
+        if biz_filter != 'All':
+            impact_val = next(
+                (b['impact'] for b in p['businesses'] if b['business'] == biz_filter),
+                0.0,
+            )
+        else:
+            impact_val = sum(b['impact'] for b in p['businesses']) / len(p['businesses'])
         rows.append({
             'Product': display_name,
             'Wholesale': p['wholesale'],
@@ -336,7 +364,7 @@ def _render_product_margins():
             'Margin ($)': p['margin'],
             'Margin (%)': p['margin_pct'],
             'Sales Ratio': p['sales_ratio'],
-            'Avg Impact': round(avg_impact, 2),
+            impact_col: round(impact_val, 2),
             'Sold By': biz_names,
             '# Shops': p['n_businesses'],
         })
@@ -355,7 +383,7 @@ def _render_product_margins():
     # Display columns
     display_cols = ['Product', 'Wholesale', 'Market Price', 'Margin ($)', 'Margin (%)']
     if show_impact:
-        display_cols += ['Avg Impact', 'Sales Ratio']
+        display_cols += [impact_col, 'Sales Ratio']
     display_cols += ['Sold By']
 
     # Metrics
@@ -371,7 +399,7 @@ def _render_product_margins():
             'Market Price': '${:,.2f}',
             'Margin ($)': '${:,.2f}',
             'Margin (%)': '{:.1f}%',
-            'Avg Impact': '{:.2f}',
+            impact_col: '{:.2f}',
             'Sales Ratio': '{:.0%}',
         }),
         use_container_width=True,
@@ -423,14 +451,14 @@ def _render_product_margins():
             df,
             x='Margin ($)',
             y='Sales Ratio',
-            size='Avg Impact',
+            size=impact_col,
             color='# Shops',
             hover_name='Product',
             title="Margin vs Sales Ratio",
             color_continuous_scale='Viridis',
             labels={
                 '# Shops': 'Shops selling it',
-                'Avg Impact': 'Demand Impact',
+                impact_col: 'Demand Impact',
                 'Sales Ratio': 'Purchase Rate',
             },
         )
