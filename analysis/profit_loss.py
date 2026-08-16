@@ -31,22 +31,25 @@ def calculate_profit_loss(df):
         all_businesses.update(direct_costs['business'].tolist())
     
     # Se non ci sono business, ritorna DataFrame vuoto
+    # NB: dtypes espliciti! Un DataFrame vuoto con colonne 'object' contamina
+    # i pd.concat a valle (aggregate_by_period) rendendo object anche le
+    # colonne numeriche degli altri periodi → np.polyfit fallisce.
     if len(all_businesses) == 0:
-        return pd.DataFrame(columns=[
-            'business',
-            'revenue',
-            'shared_revenue_based',
-            'shared_equal_split',
-            'wages',
-            'marketing',
-            'health_insurance',
-            'hr_training',
-            'total_direct_costs',
-            'total_shared_costs',
-            'total_costs',
-            'profit',
-            'margin_pct'
-        ])
+        return pd.DataFrame({
+            'business': pd.Series(dtype=str),
+            'revenue': pd.Series(dtype=float),
+            'shared_revenue_based': pd.Series(dtype=float),
+            'shared_equal_split': pd.Series(dtype=float),
+            'wages': pd.Series(dtype=float),
+            'marketing': pd.Series(dtype=float),
+            'health_insurance': pd.Series(dtype=float),
+            'hr_training': pd.Series(dtype=float),
+            'total_direct_costs': pd.Series(dtype=float),
+            'total_shared_costs': pd.Series(dtype=float),
+            'total_costs': pd.Series(dtype=float),
+            'profit': pd.Series(dtype=float),
+            'margin_pct': pd.Series(dtype=float)
+        })
     
     # Crea DataFrame base con tutti i business
     base_df = pd.DataFrame({'business': sorted(list(all_businesses))})

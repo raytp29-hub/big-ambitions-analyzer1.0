@@ -43,6 +43,13 @@ class ForecastingAnalyzer:
             
         # Rename columns for consistency
         ts_df.rename(columns={'period': 'x', metric: 'y'}, inplace=True)
+
+        # Safety net: forza dtype numerici (un dtype 'object' farebbe
+        # fallire np.polyfit in calculate_trend)
+        ts_df['x'] = pd.to_numeric(ts_df['x'], errors='coerce')
+        ts_df['y'] = pd.to_numeric(ts_df['y'], errors='coerce')
+        ts_df = ts_df.dropna(subset=['x', 'y'])
+
         return ts_df.sort_values('x')
 
     def calculate_trend(self, x: np.ndarray, y: np.ndarray) -> Tuple[float, float, float]:

@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 from analysis.profit_loss import calculate_profit_loss
@@ -62,10 +61,22 @@ class TemporalAnalyzer:
         for period in periods:
             period_df = df_copy[df_copy["period"] == period]
             pl_df = calculate_profit_loss(period_df)
-            pl_df["period"] = period       
+
+            # Salta i periodi senza business attribuibili: un DataFrame vuoto
+            # nel concat forzerebbe le colonne numeriche a dtype 'object'
+            if pl_df.empty:
+                continue
+
+            pl_df["period"] = period
             all_results.append(pl_df)
-        
-        
+
+        if not all_results:
+            # Nessun periodo con dati attribuibili
+            empty = calculate_profit_loss(df_copy.iloc[0:0])
+            empty["period"] = pd.Series(dtype=int)
+            empty["period_label"] = pd.Series(dtype=str)
+            return empty
+
         final_df = pd.concat(all_results, ignore_index=True)
         
         final_df["period_label"] = final_df["period"].apply(lambda d: self._create_period_label(d, granularity))
