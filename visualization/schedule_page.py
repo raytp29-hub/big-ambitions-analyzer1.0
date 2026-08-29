@@ -99,6 +99,13 @@ def render_business_setup():
     
     building_capacity_limit = get_building_capacity(business_category, building_code)
     st.info(f"🏢 Building Max Capacity: {building_capacity_limit} customers/hour")
+
+    # ================================================================
+    # SECTION 3b: Factory Planning (production-based, no customer demand)
+    # ================================================================
+    if business_type == "Factory":
+        from visualization.factory_planning import render_factory_planning
+        render_factory_planning()
     
     # ================================================================
     # SECTION 4: Furniture Selection

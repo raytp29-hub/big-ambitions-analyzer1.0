@@ -11,7 +11,8 @@
    "building_types": 7,
    "building_sizes": 22,
    "job_demands": 35,
-   "ai_business_defaults": 146
+   "ai_business_defaults": 146,
+   "factory_workstations": 7
   },
   "items_filter": "solo item business-rilevanti (prodotti venduti/ricette/job demands/ai defaults, arredi con showcase/workstation/waiting line/clienti+, tag business, attrezzi gym); arredi residenziali esclusi"
  },
@@ -102600,6 +102601,152 @@
      "openingHourSlots": [],
      "workShifts": []
     }
+   ]
+  }
+ ],
+ "factory_workstations": [
+  {
+   "m_Name": "BottledGoodsWorkstation",
+   "workstationType": "ba:factoryworkstationtype_bottledgoodsworkstation",
+   "localizationKey": "factory_workstation_bottledgoods",
+   "requiredAssemblyMachine": "ba:itemname_foodassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_industrialblendingmachine",
+    "ba:itemname_bottlingmachine"
+   ],
+   "supportedRecipes": [
+    "CupOfCoffee",
+    "CupOfTea",
+    "SodaCan",
+    "EnergyDrink",
+    "Slushie",
+    "BottleOfWine",
+    "Whisky",
+    "Beer",
+    "Margarita",
+    "Martini",
+    "HairCareProduct"
+   ]
+  },
+  {
+   "m_Name": "ClothingWorkstation",
+   "workstationType": "ba:factoryworkstationtype_clothingworkstation",
+   "localizationKey": "factory_workstation_clothing",
+   "requiredAssemblyMachine": "ba:itemname_consumergoodsassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_lasercuttingmachine",
+    "ba:itemname_industrialsewingmachine"
+   ],
+   "supportedRecipes": [
+    "ClassicCheapFemaleClothing",
+    "ClassicCheapMaleClothing",
+    "ClassicExpensiveFemaleClothing",
+    "ClassicExpensiveMaleClothing",
+    "ModernCheapFemaleClothing",
+    "ModernCheapMaleClothing",
+    "ModernExpensiveFemaleClothing",
+    "ModernExpensiveMaleClothing"
+   ]
+  },
+  {
+   "m_Name": "ConsumerGoodsWorkstation",
+   "workstationType": "ba:factoryworkstationtype_consumergoodsworkstation",
+   "localizationKey": "factory_workstation_consumergoods",
+   "requiredAssemblyMachine": "ba:itemname_consumergoodsassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_lasercuttingmachine"
+   ],
+   "supportedRecipes": [
+    "MotivationalBook",
+    "LimitedEditionBook",
+    "PictureBook",
+    "Novel",
+    "YoungNovel",
+    "TechnicalManual",
+    "PaperBag",
+    "Cigar",
+    "Cigarette",
+    "CheapGift",
+    "ExpensiveGift",
+    "Umbrella"
+   ]
+  },
+  {
+   "m_Name": "ElectronicsWorkstation",
+   "workstationType": "ba:factoryworkstationtype_electronicsworkstation",
+   "localizationKey": "factory_workstation_electronics",
+   "requiredAssemblyMachine": "ba:itemname_consumergoodsassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_lasercuttingmachine",
+    "ba:itemname_kilnmachine"
+   ],
+   "supportedRecipes": [
+    "Headphones01",
+    "Earbuds01",
+    "Smartphone1",
+    "Smartphone2",
+    "Smartwatch1",
+    "Smartwatch2"
+   ]
+  },
+  {
+   "m_Name": "FoodWorkstation",
+   "workstationType": "ba:factoryworkstationtype_foodworkstation",
+   "localizationKey": "factory_workstation_food",
+   "requiredAssemblyMachine": "ba:itemname_foodassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_industrialblendingmachine",
+    "ba:itemname_automatedbakingmachine"
+   ],
+   "supportedRecipes": [
+    "FrenchFries",
+    "Popcorn",
+    "FreshFood",
+    "FrozenFood",
+    "CheesePlatter",
+    "CottonCandy",
+    "IceCream",
+    "Burger",
+    "Hotdog",
+    "Kabob",
+    "Pizza",
+    "Salad",
+    "Cupcake",
+    "Donut",
+    "Croissant"
+   ]
+  },
+  {
+   "m_Name": "GardenWorkstation",
+   "workstationType": "ba:factoryworkstationtype_gardenworkstation",
+   "localizationKey": "factory_workstation_garden",
+   "requiredAssemblyMachine": "ba:itemname_foodassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_hydroponicplanter"
+   ],
+   "supportedRecipes": [
+    "Apple",
+    "Banana",
+    "Carrot",
+    "Pear",
+    "Lettuce",
+    "Tomato",
+    "CheapFlower",
+    "ExpensiveFlower"
+   ]
+  },
+  {
+   "m_Name": "JewelryWorkstation",
+   "workstationType": "ba:factoryworkstationtype_jewelryworkstation",
+   "localizationKey": "factory_workstation_jewelry",
+   "requiredAssemblyMachine": "ba:itemname_consumergoodsassemblymachine",
+   "requiredProductionMachines": [
+    "ba:itemname_lasercuttingmachine",
+    "ba:itemname_polishingmachine"
+   ],
+   "supportedRecipes": [
+    "CheapJewelry",
+    "ExpensiveJewelry"
    ]
   }
  ]

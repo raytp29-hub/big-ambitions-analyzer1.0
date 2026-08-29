@@ -378,6 +378,17 @@ def get_furniture_for_business(business_name: str) -> List[dict]:
                 seen.add(item['m_Name'])
                 furniture.append(_make_furniture_dict(item))
 
+    # Mechanism 3b: Factory machines. Production machines are not assignable
+    # and showcase nothing, so tag matching is the only reliable mechanism.
+    if business_name == 'Factory':
+        for item in _game_data['items']:
+            if ('ba:itemtag_factory' in item.get('tags', []) and
+                    item.get('isFurniture', 0) == 1 and
+                    'ba:skill_factoryworker' in item.get('suitableSkills', []) and
+                    item['m_Name'] not in seen):
+                seen.add(item['m_Name'])
+                furniture.append(_make_furniture_dict(item))
+
     # Mechanism 3: Bitmask type matching (for Gym workout equipment)
     if business_name == 'Gym':
         for item in _game_data['items']:
@@ -679,3 +690,128 @@ def get_business_comparison_data() -> List[dict]:
         })
 
     return sorted(results, key=lambda x: (x['category'], x['name']))
+
+
+# ============================================================================
+# PUBLIC API - FACTORY PLANNING
+# ============================================================================
+
+def _item_display(item_id: str) -> str:
+    """Display name for a 'ba:itemname_*' id, falling back to the id itself."""
+    item = _items_by_id.get(item_id)
+    return format_item_name(item['m_Name']) if item else _format_ba_id(item_id)
+
+
+def get_factory_workstations() -> List[dict]:
+    """
+    Return the factory workstation types with their required machines
+    (with prices from game data) and supported recipe names.
+    """
+    result = []
+    for ws in _game_data.get('factory_workstations', []):
+        machines = []
+        total_cost = 0.0
+        ids = [ws.get('requiredAssemblyMachine')] + list(ws.get('requiredProductionMachines', []))
+        for i, mid in enumerate(ids):
+            item = _items_by_id.get(mid)
+            price = item.get('defaultMarketPrice', 0.0) if item else 0.0
+            total_cost += price
+            machines.append({
+                'id': mid,
+                'name': _item_display(mid),
+                'price': price,
+                'role': 'assembly' if i == 0 else 'production',
+            })
+        result.append({
+            'name': ws['m_Name'],
+            'display_name': format_item_name(ws['m_Name'].replace('Workstation', ' Workstation')),
+            'machines': machines,
+            'total_machine_cost': total_cost,
+            'recipes': list(ws.get('supportedRecipes', [])),
+        })
+    return result
+
+
+def get_recipe_economics(recipe_name: str) -> Optional[dict]:
+    """
+    Economics for one factory recipe: ingredient cost per batch (wholesale
+    prices), production cost per unit, and comparison against buying the
+    output wholesale or selling it at default market price.
+    """
+    recipe = next((r for r in _game_data.get('recipes', [])
+                   if r['m_Name'] == recipe_name), None)
+    if recipe is None:
+        return None
+    ingredients = []
+    batch_cost = 0.0
+    cost_complete = True
+    for ing in recipe.get('ingredients', []):
+        item = _items_by_id.get(ing.get('item'))
+        unit = item.get('wholesalePrice') if item else None
+        cost = (unit or 0.0) * ing.get('amount', 0)
+        if unit is None:
+            cost_complete = False
+        batch_cost += cost
+        ingredients.append({
+            'id': ing.get('item'),
+            'name': _item_display(ing.get('item')),
+            'amount': ing.get('amount', 0),
+            'unit_wholesale': unit,
+            'cost': cost,
+        })
+    out = recipe.get('output', {}) or {}
+    out_item = _items_by_id.get(out.get('item'))
+    out_amount = out.get('amount', 0) or 0
+    out_wholesale = out_item.get('wholesalePrice', 0.0) if out_item else 0.0
+    out_market = out_item.get('defaultMarketPrice', 0.0) if out_item else 0.0
+    cost_per_unit = (batch_cost / out_amount) if out_amount else 0.0
+    return {
+        'name': recipe_name,
+        'display_name': format_item_name(recipe_name),
+        'ingredients': ingredients,
+        'batch_cost': batch_cost,
+        'cost_complete': cost_complete,
+        'output_id': out.get('item'),
+        'output_name': _item_display(out.get('item')),
+        'output_amount': out_amount,
+        'output_wholesale': out_wholesale,
+        'output_market': out_market,
+        'cost_per_unit': cost_per_unit,
+        'savings_vs_wholesale': out_wholesale - cost_per_unit,
+        'savings_vs_wholesale_pct': ((out_wholesale - cost_per_unit) / out_wholesale * 100)
+                                    if out_wholesale > 0 else None,
+        'margin_if_sold_at_market': out_market - cost_per_unit,
+    }
+
+
+def get_factory_production_plan(recipe_name: str, target_units: int) -> Optional[dict]:
+    """
+    Shopping list and economics to produce `target_units` of a recipe's output.
+    Batches are rounded up to whole batches.
+    """
+    import math
+    eco = get_recipe_economics(recipe_name)
+    if eco is None or eco['output_amount'] <= 0 or target_units <= 0:
+        return None
+    batches = math.ceil(target_units / eco['output_amount'])
+    produced = batches * eco['output_amount']
+    shopping = [{
+        'name': ing['name'],
+        'total_amount': ing['amount'] * batches,
+        'unit_wholesale': ing['unit_wholesale'],
+        'total_cost': ing['cost'] * batches,
+    } for ing in eco['ingredients']]
+    total_cost = eco['batch_cost'] * batches
+    return {
+        'recipe': eco['display_name'],
+        'target_units': target_units,
+        'batches': batches,
+        'units_produced': produced,
+        'shopping_list': shopping,
+        'total_ingredient_cost': total_cost,
+        'cost_per_unit': eco['cost_per_unit'],
+        'value_at_wholesale': produced * eco['output_wholesale'],
+        'value_at_market': produced * eco['output_market'],
+        'savings_vs_wholesale': produced * eco['savings_vs_wholesale'],
+        'margin_if_sold_at_market': produced * eco['margin_if_sold_at_market'],
+    }
