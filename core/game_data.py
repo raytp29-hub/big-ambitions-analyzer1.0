@@ -398,11 +398,15 @@ def get_furniture_for_business(business_name: str) -> List[dict]:
     my_tag = ('ba:itemtag_' + _bt_name.split('_', 1)[1]) if '_' in _bt_name else _bt_name
     primary_product_ids = set(p['itemName'] for p in bt.get('businessProducts', []))
 
-    # Check if this business has any tag coverage on furniture
+    # Check if this business has any tag coverage on furniture.
+    # NOTE (bugfix 2026-08-29): consider ANY tagged furniture, not only showcase
+    # furniture. Gym has tagged equipment (ba:itemtag_gym) but no tagged showcase
+    # furniture, so it previously fell into the building-type fallback and picked
+    # up every retail showcase (grills, salad bars, bookshelves, ...).
     has_tag_coverage = any(
         my_tag in item.get('tags', [])
         for item in _game_data['items']
-        if item.get('isFurniture', 0) == 1 and item.get('itemsThatCanShowcase')
+        if item.get('isFurniture', 0) == 1
     )
 
     for item in _game_data['items']:
@@ -416,16 +420,12 @@ def get_furniture_for_business(business_name: str) -> List[dict]:
                 if my_tag not in item.get('tags', []):
                     continue
             else:
-                # Fallback: same building type — find sibling product IDs
-                my_building_type = bt.get('suitableBuildingType')
-                sibling_ids = set()
-                for other_bt in _game_data['business_types']:
-                    if (other_bt.get('suitableBuildingType') == my_building_type and
-                            other_bt['m_Name'] != business_name):
-                        for p in other_bt.get('businessProducts', []):
-                            sibling_ids.add(p['itemName'])
+                # Fallback (bugfix 2026-08-29): only furniture that showcases at
+                # least one product THIS business sells. The old sibling-based
+                # fallback (all products of the same building type) flooded the
+                # list with unrelated retail furniture.
                 showcase_ids = set(item['itemsThatCanShowcase'])
-                if not (showcase_ids & (sibling_ids | primary_product_ids)):
+                if not (showcase_ids & primary_product_ids):
                     continue
 
             # Only add as secondary if it showcases non-primary products

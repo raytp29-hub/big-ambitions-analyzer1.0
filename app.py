@@ -20,6 +20,7 @@ from visualization.health_check_page import render_health_check_page
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
+from pathlib import Path
 
 
 
@@ -81,11 +82,28 @@ with st.sidebar:
                 st.session_state.df = df
                 st.success(f"Loaded {len(df)} rows!")
         
+        # Demo dataset: lets people without the game try the tool
+    if st.session_state.df is None:
+            _sample_path = Path(__file__).parent / "sample_data" / "Transactions_sample.csv"
+            if _sample_path.exists():
+                if st.button("🧪 Test it (sample data)",
+                             help="Load a sample Transactions export from the game — no upload needed"):
+                    _df, _error = clean_big_ambitions_csv(_sample_path.read_bytes())
+                    if _error:
+                        st.error(f"Error: {_error}")
+                    else:
+                        st.session_state.df = _df
+                        st.session_state.is_sample_data = True
+                        st.rerun()
+
         # Show current data status
     if st.session_state.df is not None:
             st.caption(f"✅ Active Data: {len(st.session_state.df)} txns")
+            if st.session_state.get("is_sample_data"):
+                st.caption("🧪 Sample data (demo)")
             if st.button("🗑️ Clear Data"):
                 st.session_state.df = None
+                st.session_state.is_sample_data = False
                 st.rerun()
     st.markdown("---")
     
