@@ -100,7 +100,7 @@ with st.sidebar:
     if st.session_state.df is not None:
             st.caption(f"✅ Active Data: {len(st.session_state.df)} txns")
             if st.session_state.get("is_sample_data"):
-                st.caption("🧪 Sample data (demo)")
+                st.caption("Sample data (demo)")
             if st.button("🗑️ Clear Data"):
                 st.session_state.df = None
                 st.session_state.is_sample_data = False
