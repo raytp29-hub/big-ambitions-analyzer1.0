@@ -86,7 +86,7 @@ with st.sidebar:
     if st.session_state.df is None:
             _sample_path = Path(__file__).parent / "sample_data" / "Transactions_sample.csv"
             if _sample_path.exists():
-                if st.button("🧪 Test it (sample data)",
+                if st.button("Test it (Demo Data)",
                              help="Load a sample Transactions export from the game — no upload needed"):
                     _df, _error = clean_big_ambitions_csv(_sample_path.read_bytes())
                     if _error:

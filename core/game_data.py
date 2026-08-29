@@ -91,10 +91,13 @@ _building_sizes_by_id: Dict[int, dict] = {}
 
 def _find_json_path() -> Path:
     """Find big_ambitions_game_data.json by checking multiple locations."""
+    # Order matters (bugfix 2026-08-29): the repo's own JSON must win.
+    # A stale legacy copy in the folder ABOVE the repo used to be checked
+    # first and silently shadowed the updated data.
     candidates = [
-        Path(__file__).parent.parent.parent / 'big_ambitions_game_data.json',
         Path(__file__).parent.parent / 'big_ambitions_game_data.json',
         Path('big_ambitions_game_data.json'),
+        Path(__file__).parent.parent.parent / 'big_ambitions_game_data.json',  # legacy
     ]
     for p in candidates:
         if p.exists():
@@ -113,6 +116,7 @@ def _load_and_index():
     json_path = _find_json_path()
     with open(json_path, 'r', encoding='utf-8') as f:
         _game_data = json.load(f)
+    _game_data['_loaded_from'] = str(json_path.resolve())
 
     # Normalize: the old boolean field `allowPlayerCreation` is now encoded as a
     # tag. Recreate it so downstream filters (`allowPlayerCreation == 1`) keep working.
@@ -814,4 +818,14 @@ def get_factory_production_plan(recipe_name: str, target_units: int) -> Optional
         'value_at_market': produced * eco['output_market'],
         'savings_vs_wholesale': produced * eco['savings_vs_wholesale'],
         'margin_if_sold_at_market': produced * eco['margin_if_sold_at_market'],
+    }
+
+
+def get_data_source_info() -> dict:
+    """Which JSON is loaded and what it contains — for debugging/UI."""
+    meta = _game_data.get('_metadata', {})
+    return {
+        'path': _game_data.get('_loaded_from', '?'),
+        'source': meta.get('source', '?'),
+        'counts': meta.get('counts', {}),
     }

@@ -18,6 +18,7 @@ from core.game_data import (
     get_factory_workstations,
     get_recipe_economics,
     get_factory_production_plan,
+    get_data_source_info,
 )
 
 
@@ -34,7 +35,14 @@ def render_factory_planning():
 
     workstations = get_factory_workstations()
     if not workstations:
-        st.warning("No factory workstation data found in game data.")
+        info = get_data_source_info()
+        st.warning(
+            "No factory workstation data found in game data.\n\n"
+            f"Loaded JSON: `{info['path']}`\n\n"
+            "This file predates the 1.0 extraction (no 'factory_workstations' "
+            "section). Make sure the repo's own big_ambitions_game_data.json is "
+            "the one being loaded and restart the app."
+        )
         return
 
     ws = st.selectbox(
