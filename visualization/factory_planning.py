@@ -211,20 +211,27 @@ def render_factory_schedule():
             # il numero di workstation viene dalla Furniture Selection
             n_ws = int(derived_ws)
             st.metric("Assembly workstations", n_ws,
-                      help="Derivate dalla Furniture Selection qui sopra")
+                      help="Derived from the Furniture Selection above: total "
+                           "assembly machines placed (1 worker each per shift)")
         else:
             n_ws = st.number_input(
                 "Assembly workstations", min_value=1, value=4, step=1,
                 key="fs_n_ws",
-                help="Nessuna assembly machine nella Furniture Selection: "
-                     "valore manuale di fallback",
+                help="No assembly machine in the Furniture Selection yet: "
+                     "manual fallback value",
             )
     with c2:
-        always_open = st.checkbox("Open 24/7", value=True, key="fs_247")
+        always_open = st.checkbox(
+            "Open 24/7", value=True, key="fs_247",
+            help="Factories can run around the clock: a 24h day is split "
+                 "into three 8-hour shifts covered by different workers",
+        )
     with c3:
         max_days = st.number_input(
             "Max working days/week per employee", min_value=1, max_value=7,
             value=6, key="fs_max_days",
+            help="Each worker takes 1 shift per day, for at most this many "
+                 "days per week; the full-coverage headcount below uses it",
         )
     if derived_ws > 0:
         st.caption("\U0001FA91 From furniture selection: "
@@ -244,7 +251,8 @@ def render_factory_schedule():
     if plan:
         plan_ws = sum(g["n_machines"] for g in plan)
         st.caption(f"\U0001F4CB Production plan active: **{plan_ws}** machines across "
-                   f"**{len(plan)}** recipes (priority = value/hour).")
+                   f"**{len(plan)}** recipes. Workers saturate the highest-value "
+                   f"recipe across ALL shifts first, then move to the next one.")
 
     # --- dipendenti dallo Step 2 ---
     all_emps = st.session_state.get("employees", [])
@@ -269,9 +277,14 @@ def render_factory_schedule():
     plan_used = st.session_state.get("fs_plan_used") or []
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Coverage", f"{res.coverage_pct:.0f}%")
-    m2.metric("Machine-hours", f"{res.covered_machine_hours:.0f}/{res.total_machine_hours:.0f}")
-    m3.metric("Wages/week", _fmt_money(res.wages_cost))
+    m1.metric("Coverage", f"{res.coverage_pct:.0f}%",
+              help="Share of machine-hours staffed over the whole opening time")
+    m2.metric("Machine-hours",
+              f"{res.covered_machine_hours:.0f}/{res.total_machine_hours:.0f}",
+              help="Staffed machine-hours / total available machine-hours per week")
+    m3.metric("Wages/week", _fmt_money(res.wages_cost),
+              help="Total weekly wages of the scheduled shifts (you only pay "
+                   "scheduled hours)")
 
     _render_factory_grid(res, workers, factory_furniture)
 
@@ -324,7 +337,7 @@ def _render_production_plan(placed):
         "Workstation type filter",
         options=ws_types,
         key="fs_pp_ws_filter",
-        help="Filtra le ricette per tipo di workstation; vuoto = tutte",
+        help="Filter recipes by workstation type; empty = all types",
     )
     if type_filter:
         options = sorted(r for r, v in catalog.items() if v["ws"] in type_filter)
@@ -341,8 +354,8 @@ def _render_production_plan(placed):
         format_func=lambda r: f"{r} \u2014 {catalog[r]['ws']}",
         key="fs_pp_recipes",
         max_selections=max_recipes,
-        help=f"Max {max_recipes}: ogni ricetta occupa almeno una delle "
-             f"{max_recipes} assembly machine piazzate",
+        help=f"Max {max_recipes}: each recipe takes at least one of the "
+             f"{max_recipes} assembly machines placed in the Furniture Selection",
     )
     if not sel:
         return []
@@ -350,19 +363,28 @@ def _render_production_plan(placed):
     metric = st.selectbox(
         "Value metric", ["Savings vs wholesale", "Margin @market"],
         key="fs_pp_metric",
-        help="Risparmio se produci per i tuoi negozi; margine se vendi a prezzo market",
+        help="Savings vs wholesale: value when producing to supply your own "
+             "stores (instead of buying wholesale). Margin @market: value when "
+             "selling at the default market price. Both are NET of ingredient costs.",
     )
 
     rows = []
     for r in sel:
         c1, c2 = st.columns(2)
         with c1:
-            m = st.number_input(f"Machines \u2014 {r}", min_value=0, value=1,
-                                step=1, key=f"fs_pp_m_{r}")
+            m = st.number_input(
+                f"Machines \u2014 {r}", min_value=0, value=1,
+                step=1, key=f"fs_pp_m_{r}",
+                help="How many of the placed assembly machines to dedicate "
+                     "to this recipe (0 = exclude it from the plan)",
+            )
         with c2:
             rate = st.number_input(
                 f"Products/hour \u2014 {r} (measured in game)",
                 min_value=0.0, value=0.0, step=1.0, key=f"fs_pp_r_{r}",
+                help="Production speed is not in the extracted game data: "
+                     "measure it in game (shown on the workstation panel). "
+                     "It varies with worker skill \u2014 use an average.",
             )
         eco = get_recipe_economics(r)
         if eco:
@@ -429,6 +451,8 @@ class _FactoryGridResult:
         for day, by_shift in res.assignments.items():
             for shift_name, uids in by_shift.items():
                 for uid in uids:
+                    if uid is None:
+                        continue
                     self.schedule.setdefault(uid, {}).setdefault(day, []).append(shift_name)
 
 
@@ -482,8 +506,8 @@ def _render_factory_grid(res, workers, factory_furniture):
         for sname, uids in by_shift.items():
             sh = shift_info[sname]
             for i, uid in enumerate(uids):
-                if i >= len(stations):
-                    break
+                if uid is None or i >= len(stations):
+                    continue
                 sid = stations[i]["id"]
                 assignment.setdefault((day, sid), []).append(
                     (sh["start"], sh["end"], uid2name.get(uid, uid), "Factory Worker"))
@@ -492,7 +516,11 @@ def _render_factory_grid(res, workers, factory_furniture):
     if not open_days:
         st.info("No open days to display.")
         return
-    sel_day = st.radio("Day", open_days, horizontal=True, key="fs_grid_day")
+    sel_day = st.radio(
+        "Day", open_days, horizontal=True, key="fs_grid_day",
+        help="Pick the day to display; the schedule was computed for the "
+             "whole week and switching day does not re-run it",
+    )
     shim = _FactoryGridResult(res)
     grid_html = build_day_html(sel_day, shim, stations, assignment, workers)
     components.html(grid_html, height=46 * (len(stations) + 1) + 80, scrolling=True)
@@ -532,9 +560,8 @@ def _render_production_report(res, plan_used):
         c3.metric("Wages/week", _fmt_money(res.wages_cost))
         c4.metric("Net/week", _fmt_money(tot_value - res.wages_cost))
         st.caption(
-            "Value/week e' GIA' al netto del costo ingredienti (savings/margin "
-            "= prezzo \u2212 costo di produzione unitario). 'Ingredient orders/week' "
-            "e' la spesa settimanale in ordini ai grossisti da sostenere per "
-            "alimentare la produzione \u2014 utile per il cash flow, non va "
-            "sottratta di nuovo dal netto."
+            "Value/week is ALREADY net of ingredient costs (savings/margin = "
+            "price \u2212 production cost per unit). 'Ingredient orders/week' is "
+            "the weekly wholesale spending needed to feed production \u2014 "
+            "useful for cash flow, do not subtract it from Net again."
         )

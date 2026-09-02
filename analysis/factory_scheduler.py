@@ -114,26 +114,37 @@ def optimize_factory_schedule(
     """
     Greedy pure-coverage scheduler.
 
-    For each day and shift, fill up to `n_workstations` slots with the
-    available Factory Workers (1 shift/day each, at most
-    `max_days_per_week` working days, critical schedule demands
-    respected). Wages never exclude anyone: they only break ties
-    (fewest days worked first, then lowest wage) and are reported.
+    Constraints: 1 worker per workstation per shift, 1 shift/day per
+    worker, at most `max_days_per_week` working days, critical schedule
+    demands respected. Wages never exclude anyone; they only break ties
+    (fewest days worked first, then lowest wage).
+
+    Without a production plan, shifts are filled in order (all machines
+    of shift 1, then shift 2, ...). With `groups` (ordered by priority),
+    filling is per RECIPE across all shifts: the highest-value recipe is
+    saturated for the whole day before any worker goes to the next one,
+    so scarce worker-hours maximize production value.
+
+    `assignments[day][shift]` is positional: index i = machine slot i
+    (None = uncovered slot), so the grid can map workers to machines.
     """
     open_days = open_days or list(DAYS_OF_WEEK)
     shifts = generate_factory_shifts(start_hour, end_hour)
-    roster = sorted(employees, key=lambda e: e.hourly_wage)
 
-    # production plan: groups are ORDERED by priority (highest value first).
-    # The crew of each shift fills machines in group order, so scarce
-    # worker-hours go to the most valuable recipes first.
     group_layout = [(g['label'], int(g['n_machines'])) for g in (groups or [])
                     if int(g.get('n_machines', 0)) > 0]
     if group_layout:
         n_workstations = sum(n for _, n in group_layout)
     covered_by_group = {label: 0.0 for label, _ in group_layout}
 
-    days_worked = {e.uid: 0 for e in roster}
+    # slot index -> group label (None when no plan is used)
+    slot_group = []
+    for label, n in group_layout:
+        slot_group.extend([label] * n)
+    if not slot_group:
+        slot_group = [None] * n_workstations
+
+    days_worked = {e.uid: 0 for e in employees}
     assignments, uncovered, shifts_by_day = {}, {}, {}
     covered = total = wages = 0.0
 
@@ -141,39 +152,49 @@ def optimize_factory_schedule(
         if day not in open_days:
             continue
         shifts_by_day[day] = shifts
+        used_today = set()
+        slots = {sh['name']: [None] * n_workstations for sh in shifts}
+        total += n_workstations * sum(sh['hours'] for sh in shifts)
+
+        # fill order: column-major (recipe first) with a plan,
+        # row-major (shift first) without
+        if group_layout:
+            fill_order = []
+            offset = 0
+            for label, n in group_layout:
+                for sh in shifts:
+                    for k in range(n):
+                        fill_order.append((sh, offset + k))
+                offset += n
+        else:
+            fill_order = [(sh, k) for sh in shifts for k in range(n_workstations)]
+
+        for sh, slot in fill_order:
+            cands = [e for e in employees
+                     if e.uid not in used_today
+                     and days_worked[e.uid] < max_days_per_week
+                     and not _shift_blocked_by_demands(e, sh['type'])]
+            if not cands:
+                continue
+            # spread the week first (fewest days worked), then lowest wage
+            cands.sort(key=lambda e: (days_worked[e.uid], e.hourly_wage))
+            emp = cands[0]
+            slots[sh['name']][slot] = emp.uid
+            used_today.add(emp.uid)
+            covered += sh['hours']
+            wages += emp.hourly_wage * sh['hours']
+            g = slot_group[slot]
+            if g is not None:
+                covered_by_group[g] += sh['hours']
+
         assignments[day] = {}
         uncovered[day] = {}
-        used_today = set()
         for sh in shifts:
-            # chi ha lavorato meno giorni ha priorita' (spalma la settimana),
-            # a parita' vince il salario piu' basso
-            roster = sorted(roster, key=lambda e: (days_worked[e.uid], e.hourly_wage))
-            total += n_workstations * sh['hours']
-            crew = []
-            for emp in roster:
-                if len(crew) >= n_workstations:
-                    break
-                if emp.uid in used_today:
-                    continue
-                if days_worked[emp.uid] >= max_days_per_week:
-                    continue
-                if _shift_blocked_by_demands(emp, sh['type']):
-                    continue
-                crew.append(emp)
-                used_today.add(emp.uid)
-                covered += sh['hours']
-                wages += emp.hourly_wage * sh['hours']
-            for emp in crew:
-                days_worked[emp.uid] += 1
-            assignments[day][sh['name']] = [e.uid for e in crew]
-            uncovered[day][sh['name']] = n_workstations - len(crew)
-            if group_layout:
-                offset = 0
-                staffed = len(crew)
-                for label, n_mach in group_layout:
-                    got = min(max(staffed - offset, 0), n_mach)
-                    covered_by_group[label] += got * sh['hours']
-                    offset += n_mach
+            filled = slots[sh['name']]
+            assignments[day][sh['name']] = filled
+            uncovered[day][sh['name']] = sum(1 for u in filled if u is None)
+        for uid in used_today:
+            days_worked[uid] += 1
 
     # headcount for full coverage: every slot of every shift, every open day,
     # with each worker doing 1 shift/day and max_days_per_week days.
