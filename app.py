@@ -122,7 +122,7 @@ with st.sidebar:
     business data with professional insights.
     
     **Version:** 2.0.0  
-    **Updated:** March 2026
+    **Updated:** September 2026
     """)
     
 
