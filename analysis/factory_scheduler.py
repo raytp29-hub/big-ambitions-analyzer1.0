@@ -3,18 +3,17 @@ Dedicated factory scheduler — separate from the business optimizer.
 
 A factory has no customer demand: production scales with staffed
 workstation-hours (1 worker per assembly machine at a time; when a shift
-ends another worker can take over). The objective is therefore to fill
-every workstation slot for as many hours as possible, as long as the
-value produced in that hour beats the worker's wage.
+ends another worker can take over). The objective is therefore PURE
+COVERAGE: fill every workstation slot for as many hours as possible.
+Wages NEVER gate the assignment — in Big Ambitions a staffed machine
+produces far more value than any wage; economics are reported by the UI
+(production plan), not decided here.
 
 Deliberately NOT an LP: with identical stations and one role, a greedy
-assignment (cheapest compatible worker first, per shift) is optimal per
-shift and transparent to the user. No new dependencies.
-
-value_per_hour <= 0 means "coverage mode": schedule everyone possible,
-wages are reported but don't gate the assignment.
+assignment (spread days first, then lowest wage) is optimal per shift
+and transparent to the user. No new dependencies.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
@@ -86,24 +85,21 @@ def _shift_blocked_by_demands(employee, shift_type: str) -> bool:
 
 @dataclass
 class FactoryScheduleResult:
-    assignments: Dict[str, Dict[str, List[str]]]   # day -> shift_name -> [emp names]
+    assignments: Dict[str, Dict[str, List[str]]]   # day -> shift_name -> [emp UIDs]
     shifts_by_day: Dict[str, List[dict]]
     covered_machine_hours: float
     total_machine_hours: float
     wages_cost: float
-    production_value: float
     uncovered: Dict[str, Dict[str, int]]           # day -> shift -> free slots
-    skipped_negative: List[str] = field(default_factory=list)
     workers_for_full_coverage: int = 0
+    # production-plan groups (ordered by priority); empty when no plan is used
+    group_layout: List[tuple] = None               # [(label, n_machines), ...]
+    covered_hours_by_group: Dict[str, float] = None
 
     @property
     def coverage_pct(self) -> float:
         return (self.covered_machine_hours / self.total_machine_hours * 100) \
             if self.total_machine_hours else 0.0
-
-    @property
-    def net_value(self) -> float:
-        return self.production_value - self.wages_cost
 
 
 def optimize_factory_schedule(
@@ -112,26 +108,34 @@ def optimize_factory_schedule(
     start_hour: int = 0,
     end_hour: int = 24,
     open_days: Optional[List[str]] = None,
-    value_per_hour: float = 0.0,
     max_days_per_week: int = 6,
+    groups: Optional[List[dict]] = None,
 ) -> FactoryScheduleResult:
     """
-    Greedy coverage scheduler.
+    Greedy pure-coverage scheduler.
 
-    For each day and shift, fill up to `n_workstations` slots picking the
-    cheapest available Factory Workers (1 shift/day each, at most
-    `max_days_per_week` working days, schedule demands respected).
-    When value_per_hour > 0, a worker is scheduled only if
-    value_per_hour > hourly_wage (economic mode).
+    For each day and shift, fill up to `n_workstations` slots with the
+    available Factory Workers (1 shift/day each, at most
+    `max_days_per_week` working days, critical schedule demands
+    respected). Wages never exclude anyone: they only break ties
+    (fewest days worked first, then lowest wage) and are reported.
     """
     open_days = open_days or list(DAYS_OF_WEEK)
     shifts = generate_factory_shifts(start_hour, end_hour)
-    by_wage = sorted(employees, key=lambda e: e.hourly_wage)
+    roster = sorted(employees, key=lambda e: e.hourly_wage)
 
-    days_worked = {e.uid: 0 for e in by_wage}
+    # production plan: groups are ORDERED by priority (highest value first).
+    # The crew of each shift fills machines in group order, so scarce
+    # worker-hours go to the most valuable recipes first.
+    group_layout = [(g['label'], int(g['n_machines'])) for g in (groups or [])
+                    if int(g.get('n_machines', 0)) > 0]
+    if group_layout:
+        n_workstations = sum(n for _, n in group_layout)
+    covered_by_group = {label: 0.0 for label, _ in group_layout}
+
+    days_worked = {e.uid: 0 for e in roster}
     assignments, uncovered, shifts_by_day = {}, {}, {}
-    covered = total = wages = value = 0.0
-    skipped = set()
+    covered = total = wages = 0.0
 
     for day in DAYS_OF_WEEK:
         if day not in open_days:
@@ -141,12 +145,12 @@ def optimize_factory_schedule(
         uncovered[day] = {}
         used_today = set()
         for sh in shifts:
-            # chi ha lavorato meno giorni ha priorità (spalma la settimana),
-            # a parità vince il salario più basso
-            by_wage = sorted(by_wage, key=lambda e: (days_worked[e.uid], e.hourly_wage))
+            # chi ha lavorato meno giorni ha priorita' (spalma la settimana),
+            # a parita' vince il salario piu' basso
+            roster = sorted(roster, key=lambda e: (days_worked[e.uid], e.hourly_wage))
             total += n_workstations * sh['hours']
             crew = []
-            for emp in by_wage:
+            for emp in roster:
                 if len(crew) >= n_workstations:
                     break
                 if emp.uid in used_today:
@@ -155,19 +159,21 @@ def optimize_factory_schedule(
                     continue
                 if _shift_blocked_by_demands(emp, sh['type']):
                     continue
-                if value_per_hour > 0 and emp.hourly_wage >= value_per_hour:
-                    skipped.add(emp.name)
-                    continue
                 crew.append(emp)
                 used_today.add(emp.uid)
                 covered += sh['hours']
                 wages += emp.hourly_wage * sh['hours']
-                if value_per_hour > 0:
-                    value += value_per_hour * sh['hours']
             for emp in crew:
                 days_worked[emp.uid] += 1
-            assignments[day][sh['name']] = [e.name for e in crew]
+            assignments[day][sh['name']] = [e.uid for e in crew]
             uncovered[day][sh['name']] = n_workstations - len(crew)
+            if group_layout:
+                offset = 0
+                staffed = len(crew)
+                for label, n_mach in group_layout:
+                    got = min(max(staffed - offset, 0), n_mach)
+                    covered_by_group[label] += got * sh['hours']
+                    offset += n_mach
 
     # headcount for full coverage: every slot of every shift, every open day,
     # with each worker doing 1 shift/day and max_days_per_week days.
@@ -182,8 +188,8 @@ def optimize_factory_schedule(
         covered_machine_hours=covered,
         total_machine_hours=total,
         wages_cost=wages,
-        production_value=value,
         uncovered=uncovered,
-        skipped_negative=sorted(skipped),
         workers_for_full_coverage=full,
+        group_layout=group_layout,
+        covered_hours_by_group=covered_by_group,
     )

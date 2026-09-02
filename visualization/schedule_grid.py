@@ -17,6 +17,7 @@ ROLE_COLORS = {
     'Programmer': '#3b82f6',         # blu
     'Designer': '#ec4899',           # rosa
     'Office Worker': '#8b5cf6',      # viola
+    'Factory Worker': '#f97316',     # arancio industriale (assembly machine)
 }
 _FALLBACK_COLORS = ['#ef4444', '#8b5cf6', '#10b981', '#3b82f6', '#ec4899']
 

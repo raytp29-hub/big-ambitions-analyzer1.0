@@ -6,7 +6,8 @@ import streamlit as st
 import pandas as pd
 from typing import List, Optional
 from analysis.schedule_optimizer import optimize_schedule, optimize_schedule_variable
-
+import streamlit.components.v1 as components
+from visualization.schedule_grid import (build_station_rows, assign_shift_employees, build_day_html)
 
 
 
@@ -868,10 +869,7 @@ def render_optimization():
             st.subheader("📅 Optimized Weekly Schedule")
             
            
-            import streamlit.components.v1 as components
-            from visualization.schedule_grid import (
-                build_station_rows, assign_shift_employees, build_day_html
-            )
+            
 
             stations = build_station_rows(st.session_state.selected_furniture)
             assignment = assign_shift_employees(result, st.session_state.employees, stations)
@@ -958,10 +956,22 @@ def render_schedule_optimizer_page():
     st.divider()
 
 
-    render_optimization()
+    # Le sezioni Optimization e Staffing Suggestion sono demand-driven
+    # (curve clienti, wage-cost minimization). Per la Factory non hanno senso:
+    # non c'e' domanda clienti, l'obiettivo e' massimizzare ore-macchina.
+    # Per business_type=="Factory" usa "Factory Schedule (dedicated)" sopra.
+    business_type = st.session_state.get("business_type", "")
+    if business_type != "Factory":
+        render_optimization()
 
-    render_staffing_suggestion()
-    st.divider()
+        render_staffing_suggestion()
+        st.divider()
+    else:
+        # Factory: scheduler dedicato pure-coverage al posto dell'optimizer
+        # business (demand-driven) e della staffing suggestion.
+        from visualization.factory_planning import render_factory_schedule
+        render_factory_schedule()
+        st.divider()
     
     
     # Show complete setup summary at bottom
