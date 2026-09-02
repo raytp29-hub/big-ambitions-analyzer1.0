@@ -19,6 +19,7 @@ from core.game_data import (
     get_recipe_economics,
     get_factory_production_plan,
     get_data_source_info,
+    format_item_name,
 )
 
 
@@ -122,7 +123,8 @@ def render_factory_planning():
     col1, col2, col3 = st.columns(3)
     with col1:
         recipe_name = st.selectbox(
-            "Recipe", options=ws["recipes"], key="factory_recipe"
+            "Recipe", options=ws["recipes"], key="factory_recipe",
+            format_func=format_item_name,
         )
     with col2:
         target_units = st.number_input(
@@ -351,7 +353,7 @@ def _render_production_plan(placed):
     sel = st.multiselect(
         "Recipes to produce",
         options=options,
-        format_func=lambda r: f"{r} \u2014 {catalog[r]['ws']}",
+        format_func=lambda r: f"{format_item_name(r)} \u2014 {catalog[r]['ws']}",
         key="fs_pp_recipes",
         max_selections=max_recipes,
         help=f"Max {max_recipes}: each recipe takes at least one of the "
@@ -373,14 +375,14 @@ def _render_production_plan(placed):
         c1, c2 = st.columns(2)
         with c1:
             m = st.number_input(
-                f"Machines \u2014 {r}", min_value=0, value=1,
+                f"Machines \u2014 {format_item_name(r)}", min_value=0, value=1,
                 step=1, key=f"fs_pp_m_{r}",
                 help="How many of the placed assembly machines to dedicate "
                      "to this recipe (0 = exclude it from the plan)",
             )
         with c2:
             rate = st.number_input(
-                f"Products/hour \u2014 {r} (measured in game)",
+                f"Products/hour \u2014 {format_item_name(r)} (measured in game)",
                 min_value=0.0, value=0.0, step=1.0, key=f"fs_pp_r_{r}",
                 help="Production speed is not in the extracted game data: "
                      "measure it in game (shown on the workstation panel). "
@@ -394,7 +396,7 @@ def _render_production_plan(placed):
         else:
             vu, cu = 0.0, 0.0
         rows.append({
-            "label": r, "n_machines": int(m), "rate": float(rate),
+            "label": format_item_name(r), "n_machines": int(m), "rate": float(rate),
             "value_unit": float(vu), "value_hour": float(rate) * float(vu),
             "cost_unit": float(cu),
             "assembly": catalog[r]["assembly"], "ws": catalog[r]["ws"],

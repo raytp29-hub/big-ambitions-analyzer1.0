@@ -156,6 +156,18 @@ def _get_business_type(business_name: str) -> Optional[dict]:
     return None
 
 
+# In-game display names that differ from the internal m_Name. The extracted
+# JSON has no localization strings, so these were verified in game by price:
+# ZanaMan is the premium brand (phone $999 market, watch $399), Arty Fish the
+# budget one (phone $799, watch $324).
+DISPLAY_NAME_OVERRIDES = {
+    'Smartphone1': 'Arty Fish Phone',
+    'Smartphone2': 'ZanaMan Phone',
+    'Smartwatch1': 'ZanaMan Smartwatch',
+    'Smartwatch2': 'Arty Fish Smartwatch',
+}
+
+
 def format_item_name(camel_name: str) -> str:
     """
     Convert CamelCase to display name.
@@ -163,7 +175,11 @@ def format_item_name(camel_name: str) -> str:
     'FastFoodRestaurant' -> 'Fast Food Restaurant'
     'DJBooth' -> 'DJ Booth'
     'HRManager' -> 'HR Manager'
+    In-game names that differ from the internal one (e.g. 'Smartphone2'
+    -> 'ZanaMan Phone') come from DISPLAY_NAME_OVERRIDES.
     """
+    if camel_name in DISPLAY_NAME_OVERRIDES:
+        return DISPLAY_NAME_OVERRIDES[camel_name]
     # Insert space before uppercase that follows lowercase
     result = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', camel_name)
     # Insert space before uppercase that is followed by lowercase (handles 'DJBooth' -> 'DJ Booth')
