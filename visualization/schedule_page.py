@@ -645,8 +645,31 @@ st.divider()
 # STAFFING SUGGESTION (advice from furniture + hours + game data)
 # ============================================================================
 
+def _is_factory_selected() -> bool:
+    """True when the business chosen in Step 1 is the Factory.
+
+    Robust against a single stale session key: checks both the business-type
+    selectbox and the stored business_setup name. Factories are
+    production-driven, so the demand-based Step 5 optimizer and the
+    customer-curve Staffing Suggestion must not run for them.
+    """
+    if st.session_state.get("business_type", "") == "Factory":
+        return True
+    setup = st.session_state.get("business_setup")
+    name = getattr(setup, "business_name", "") if setup else ""
+    return name == "Factory"
+
+
 def render_staffing_suggestion():
     st.header("🧑‍💼 Staffing Suggestion")
+
+    if _is_factory_selected():
+        st.info(
+            "Factories are production-driven, not customer-driven. Use "
+            "**Factory Schedule** (in Step 1 → Factory Planning) to size the "
+            "workforce by workstation-hours instead."
+        )
+        return
 
     setup = st.session_state.get('business_setup')
     furniture = st.session_state.get('selected_furniture')
@@ -718,6 +741,17 @@ def render_optimization():
     
     if not st.session_state.weekly_schedule:
         st.warning("Configure operating hours in Step 4")
+        return
+
+    if _is_factory_selected():
+        st.header("🚀 Step 5: Optimization")
+        st.info(
+            "This step minimizes wage cost against the customer-demand curve, "
+            "so it can leave workers unscheduled — which is wrong for a factory. "
+            "Factories have no customers: use **Factory Schedule** (Step 1 → "
+            "Factory Planning) to fill every workstation for as many hours as "
+            "possible."
+        )
         return
 
     st.header("🚀 Step 5: Optimization")
