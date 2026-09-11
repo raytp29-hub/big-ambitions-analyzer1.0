@@ -20,7 +20,7 @@ from core.game_data import (
     get_building_capacity as _get_building_capacity,
     get_furniture_for_business as _get_furniture_for_business,
     get_employee_roles_for_business,
-    format_item_name,
+    business_type_display_by_name,
     get_demand_multipliers,
     display_to_internal,
 )
@@ -471,7 +471,7 @@ def get_business_tupes_for_category(category: str) -> List[str]:
     raw_names = get_businesses_for_category(category)
     # Exclude Headquarters from the UI list
     excluded = ['Headquarter']
-    return [format_item_name(name) for name in raw_names if name not in excluded]
+    return [business_type_display_by_name(name) for name in raw_names if name not in excluded]
 
 
 # ============================================================================

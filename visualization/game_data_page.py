@@ -21,7 +21,7 @@ from core.game_data import (
     get_business_comparison_data,
     get_products_for_business,
     get_employee_roles_for_business,
-    format_item_name,
+    business_type_display_by_name,
 )
 
 
@@ -117,7 +117,7 @@ def _build_business_list() -> list:
         for biz in get_businesses_for_category(cat):
             if biz == 'Headquarter':
                 continue
-            all_businesses.append(format_item_name(biz))
+            all_businesses.append(business_type_display_by_name(biz))
     all_businesses.sort()
     return all_businesses
 
@@ -300,7 +300,7 @@ def _render_product_margins():
         # Business options depend on the selected category
         if cat_filter != 'All':
             biz_options = sorted(
-                format_item_name(b)
+                business_type_display_by_name(b)
                 for b in get_businesses_for_category(cat_filter)
                 if b != 'Headquarter'
             )
@@ -321,7 +321,7 @@ def _render_product_margins():
     # Build business list for selected category
     if cat_filter != 'All':
         biz_in_cat = set(
-            format_item_name(b) for b in get_businesses_for_category(cat_filter)
+            business_type_display_by_name(b) for b in get_businesses_for_category(cat_filter)
         )
     else:
         biz_in_cat = None

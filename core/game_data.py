@@ -320,6 +320,36 @@ def recipe_display_name(recipe: dict, lang: str = "en") -> str:
     return format_item_name(m_name)
 
 
+def recipe_display_name_by_id(recipe_name: str, lang: str = "en") -> str:
+    """Come recipe_display_name(recipe_dict) ma parte dal m_Name stringa.
+
+    Chi la usa: chiamanti che hanno solo il nome della ricetta come stringa
+    (es. dropdown Streamlit dove l'options list e' `ws['recipes']`, che sono
+    m_Name delle ricette supportate dalla workstation). Fanno il lookup
+    dell'oggetto ricetta qui, poi delegano a recipe_display_name().
+
+    Se il nome non e' una ricetta valida (edge case: ricetta rimossa da
+    un'update del gioco), cade su format_item_name.
+    """
+    recipe = next((r for r in _game_data.get('recipes', [])
+                   if r['m_Name'] == recipe_name), None)
+    return recipe_display_name(recipe, lang) if recipe else format_item_name(recipe_name)
+
+
+def business_type_display_by_name(m_name: str, lang: str = "en") -> str:
+    """Come business_type_name(bt_dict) ma parte dal m_Name stringa.
+
+    Chi la usa: chiamanti che hanno solo il m_Name (es. output di
+    get_businesses_for_category che ritorna nomi tipo 'CoffeeShop'). Riusa
+    _get_business_type() per il lookup del dict, poi delega a
+    business_type_name().
+
+    Fallback: format_item_name(m_name) — la vecchia regex CamelCase.
+    """
+    bt = _get_business_type(m_name)
+    return business_type_name(bt, lang) if bt else format_item_name(m_name)
+
+
 def _make_furniture_dict(item: dict) -> dict:
     """Convert a raw item dict into the furniture API format."""
     showcase_products = []
