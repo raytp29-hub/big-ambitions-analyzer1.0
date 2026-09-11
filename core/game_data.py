@@ -18,30 +18,6 @@ from .localization import display_name, has_key
 # As of the June 2026 game update, IDs are string identifiers prefixed "ba:"
 # (e.g. "ba:skill_cleaning", "ba:buildingtype_retail") instead of integer enums.
 
-# Display names for employee skills, keyed by their "ba:skill_*" identifier.
-SKILL_DISPLAY: Dict[str, str] = {
-    "ba:skill_customerservice": "Customer Service",
-    "ba:skill_cleaning": "Cleaning",
-    "ba:skill_lawyer": "Lawyer",
-    "ba:skill_purchasingagent": "Purchasing Agent",
-    "ba:skill_logisticsmanager": "Logistics Manager",
-    "ba:skill_deliverydriver": "Delivery Driver",
-    "ba:skill_programmer": "Programmer",
-    "ba:skill_hrmanager": "HR Manager",
-    "ba:skill_graphicdesigner": "Graphic Designer",
-    "ba:skill_dj": "DJ",
-    "ba:skill_hairstylist": "Hair Stylist",
-    "ba:skill_securityguard": "Security Guard",
-    "ba:skill_headhunter": "Headhunter",
-    "ba:skill_factoryworker": "Factory Worker",
-    "ba:skill_gymtrainer": "Gym Trainer",
-    "ba:skill_actor": "Actor",
-    "ba:skill_stagecrew": "Stage Crew",
-    "ba:skill_projectionist": "Projectionist",
-    "ba:skill_eventplanner": "Event Planner",
-    "ba:skill_travelagent": "Travel Agent",
-}
-
 CLEANING_SKILL = "ba:skill_cleaning"
 
 
@@ -53,21 +29,42 @@ def _format_ba_id(ba_id: str) -> str:
 
 
 def skill_display(skill_id) -> str:
-    """Human-readable name for a 'ba:skill_*' identifier."""
-    return SKILL_DISPLAY.get(skill_id, _format_ba_id(skill_id))
+    """Human-readable name for a 'ba:skill_*' identifier.
+
+    Legge da en.json (chiavi tipo 'ba:skill_customerservice' -> 'Customer Service').
+    Se la chiave non e' in en.json — es. una skill di una futura patch — cade
+    su _format_ba_id (es. 'ba:skill_newthing' -> 'Newthing') come fallback
+    non-crashing.
+
+    Prima di Step 3 questa funzione leggeva dal dict hardcoded SKILL_DISPLAY;
+    lo abbiamo rimosso perche' tutte le 20 skill sono coperte da en.json
+    verbatim, e mantenere due sorgenti creava rischio di disallineamento.
+    """
+    return display_name(skill_id, default=_format_ba_id(skill_id))
 
 
-# Building types relevant for player businesses: "ba:buildingtype_*" -> display name
-PLAYER_BUILDING_TYPES: Dict[str, str] = {
-    "ba:buildingtype_retail": "Retail",
-    "ba:buildingtype_office": "Office",
-    "ba:buildingtype_warehouse": "Warehouse",
-    "ba:buildingtype_cinema": "Cinema",
-    "ba:buildingtype_theater": "Theater",
+# Building types relevant for player businesses.
+#
+# Prima di Step 3 questo era un dict {id: display} con doppia responsabilita':
+# validita' (id valido?) e display (nome mostrato). Le due cose sono state
+# separate: il set di IDs vive qui, il display name lo prendiamo da en.json
+# via display_name() dove serve. Vantaggio: se un domani il gioco rinomina
+# "Retail" -> "Retail Space", il nome cambia da solo (nessuna modifica al
+# codice); e non si puo' accidentalmente rendere il set incoerente col display.
+PLAYER_BUILDING_TYPE_IDS: frozenset = frozenset({
+    "ba:buildingtype_retail",
+    "ba:buildingtype_office",
+    "ba:buildingtype_warehouse",
+    "ba:buildingtype_cinema",
+    "ba:buildingtype_theater",
+})
+
+# Reverse lookup: display name -> id.
+# Costruito al momento dell'import da en.json — quindi se en.json cambia
+# ("Retail" -> "Retail Space"), il reverse si aggiorna automaticamente.
+BUILDING_TYPE_IDS: Dict[str, str] = {
+    display_name(bt_id): bt_id for bt_id in PLAYER_BUILDING_TYPE_IDS
 }
-
-# Reverse lookup: display name -> "ba:buildingtype_*" id
-BUILDING_TYPE_IDS: Dict[str, str] = {v: k for k, v in PLAYER_BUILDING_TYPES.items()}
 
 # Tag that marks a business type as creatable by the player
 PLAYER_CREATION_TAG = "ba:businesstag_allowplayercreation"
@@ -158,30 +155,23 @@ def _get_business_type(business_name: str) -> Optional[dict]:
     return None
 
 
-# In-game display names that differ from the internal m_Name. The extracted
-# JSON has no localization strings, so these were verified in game by price:
-# ZanaMan is the premium brand (phone $999 market, watch $399), Arty Fish the
-# budget one (phone $799, watch $324).
-DISPLAY_NAME_OVERRIDES = {
-    'Smartphone1': 'Arty Fish Phone',
-    'Smartphone2': 'ZanaMan Phone',
-    'Smartwatch1': 'ZanaMan Smartwatch',
-    'Smartwatch2': 'Arty Fish Smartwatch',
-}
-
-
 def format_item_name(camel_name: str) -> str:
     """
-    Convert CamelCase to display name.
+    Convert CamelCase to display name via regex.
     'CoffeeShop' -> 'Coffee Shop'
     'FastFoodRestaurant' -> 'Fast Food Restaurant'
     'DJBooth' -> 'DJ Booth'
     'HRManager' -> 'HR Manager'
-    In-game names that differ from the internal one (e.g. 'Smartphone2'
-    -> 'ZanaMan Phone') come from DISPLAY_NAME_OVERRIDES.
+
+    Usata come FALLBACK dalle funzioni bridge (item_name / business_type_name /
+    workstation_name) quando en.json non ha una voce per la chiave — in
+    pratica solo per i 2 item legacy non coperti dal file di localizzazione.
+    Non chiamata direttamente da nessun altro chiamante.
+
+    Il vecchio DISPLAY_NAME_OVERRIDES per Smartphone1/2 e Smartwatch1/2 e'
+    stato rimosso in Step 3: en.json ha gli stessi nomi commerciali
+    ("Arty Fish Phone", "ZanaMan Phone", ...) verbatim.
     """
-    if camel_name in DISPLAY_NAME_OVERRIDES:
-        return DISPLAY_NAME_OVERRIDES[camel_name]
     # Insert space before uppercase that follows lowercase
     result = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', camel_name)
     # Insert space before uppercase that is followed by lowercase (handles 'DJBooth' -> 'DJ Booth')
@@ -206,7 +196,7 @@ def display_to_internal(display_name: str) -> str:
 # ============================================================================
 # LOCALIZED DISPLAY NAMES (via en.json)
 # ----------------------------------------------------------------------------
-# Preferred over format_item_name() and DISPLAY_NAME_OVERRIDES:
+# Preferred over the raw format_item_name() regex:
 # - en.json is the game's own source of truth (updated by the developer)
 # - covers 401/403 items and 44/44 business types verbatim, with
 #   in-game commercial names (e.g. Smartphone1 -> "Arty Fish Phone")
@@ -329,8 +319,8 @@ def get_business_categories() -> List[str]:
     for bt in _game_data['business_types']:
         if bt.get('allowPlayerCreation') == 1:
             btype_id = bt['suitableBuildingType']
-            if btype_id in PLAYER_BUILDING_TYPES:
-                categories.add(PLAYER_BUILDING_TYPES[btype_id])
+            if btype_id in PLAYER_BUILDING_TYPE_IDS:
+                categories.add(display_name(btype_id))
     return sorted(categories)
 
 
@@ -710,7 +700,7 @@ def get_all_products_with_margins() -> List[dict]:
         if bt.get('allowPlayerCreation') != 1:
             continue
         btype_id = bt['suitableBuildingType']
-        if btype_id not in PLAYER_BUILDING_TYPES:
+        if btype_id not in PLAYER_BUILDING_TYPE_IDS:
             continue
         for prod in bt.get('businessProducts', []):
             pid = prod['itemName']
@@ -755,11 +745,11 @@ def get_business_comparison_data() -> List[dict]:
         if bt.get('allowPlayerCreation') != 1:
             continue
         btype_id = bt['suitableBuildingType']
-        if btype_id not in PLAYER_BUILDING_TYPES:
+        if btype_id not in PLAYER_BUILDING_TYPE_IDS:
             continue
 
         name = bt['m_Name']
-        category = PLAYER_BUILDING_TYPES[btype_id]
+        category = display_name(btype_id)
 
         # Products
         products = get_products_for_business(name)
