@@ -280,6 +280,46 @@ def workstation_name(ws: dict, lang: str = "en") -> str:
     return format_item_name(ws.get('m_Name', '').replace('Workstation', ' Workstation'))
 
 
+# Sei ricette hanno un nome commerciale in en.json diverso dal loro m_Name
+# interno (stesso fenomeno di Smartphone1 -> 'Arty Fish Phone' per gli item).
+# Questa tabella mappa SOLO la chiave di localizzazione (non il display name).
+# Il valore visualizzato arriva sempre da en.json, quindi se il gioco un
+# domani rinomina "Wine Recipe" -> "Sparkling Wine Recipe", il tool si
+# aggiorna automaticamente senza modifiche a questo dict.
+_RECIPE_LOCALE_OVERRIDES = {
+    "BottleOfWine": "recipes_winerecipe",
+    "CupOfCoffee":  "recipes_coffeerecipe",
+    "CupOfTea":     "recipes_tearecipe",
+    "Slushie":      "recipes_slushirecipe",
+    "SodaCan":      "recipes_sodarecipe",
+    "YoungNovel":   "recipes_youthnovelrecipe",
+}
+
+
+def recipe_display_name(recipe: dict, lang: str = "en") -> str:
+    """Display name of a factory recipe from en.json.
+
+    Locale key convention: 'recipes_{m_Name.lower()}recipe'.
+      Es. m_Name='Burger' -> chiave 'recipes_burgerrecipe' -> 'Burger Recipe'
+
+    Copertura misurata: 56/62 con la convention standard. Le altre 6 hanno
+    nome commerciale diverso da m_Name — mappate esplicitamente in
+    _RECIPE_LOCALE_OVERRIDES sopra.
+
+    Fallback: format_item_name(m_Name) — non aggiungiamo " Recipe" al
+    fallback perche' m_Name delle ricette non contiene la parola (es. m_Name
+    e' 'Burger', non 'BurgerRecipe'). Se la chiave manca in en.json, meglio
+    un nome onesto senza suffisso che uno fabbricato che potrebbe essere
+    sbagliato (KabobRecipe in en.json e' 'Chicken Kabob Skewer Recipe',
+    non 'Kabob Recipe').
+    """
+    m_name = recipe.get('m_Name', '')
+    key = _RECIPE_LOCALE_OVERRIDES.get(m_name, f'recipes_{m_name.lower()}recipe')
+    if has_key(key, lang):
+        return display_name(key, lang)
+    return format_item_name(m_name)
+
+
 def _make_furniture_dict(item: dict) -> dict:
     """Convert a raw item dict into the furniture API format."""
     showcase_products = []
@@ -866,7 +906,7 @@ def get_recipe_economics(recipe_name: str) -> Optional[dict]:
     cost_per_unit = (batch_cost / out_amount) if out_amount else 0.0
     return {
         'name': recipe_name,
-        'display_name': format_item_name(recipe_name),
+        'display_name': recipe_display_name(recipe),
         'ingredients': ingredients,
         'batch_cost': batch_cost,
         'cost_complete': cost_complete,
