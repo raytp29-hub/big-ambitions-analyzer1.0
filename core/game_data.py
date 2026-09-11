@@ -267,17 +267,40 @@ def business_type_name(bt: dict, lang: str = "en") -> str:
     return format_item_name(bt.get('m_Name', ''))
 
 
+def workstation_name(ws: dict, lang: str = "en") -> str:
+    """Display name of a factory workstation from en.json.
+
+    Le workstation hanno DUE chiavi utili per la localizzazione:
+      - ws['localizationKey']   es. 'factory_workstation_bottledgoods'
+      - ws['workstationType']   es. 'ba:factoryworkstationtype_bottledgoodsworkstation'
+
+    Entrambe risolvono allo stesso display name in en.json. Preferiamo
+    `localizationKey` perche' i dev del gioco l'hanno etichettato
+    esplicitamente come chiave di localizzazione — segnale che e' la
+    "API stabile" (workstationType potrebbe cambiare in futuro se
+    rinominano il tipo interno).
+
+    Fallback (se localizationKey e workstationType mancano o non risolvono):
+    ricreiamo il vecchio workaround manuale
+    "PizzaOvenWorkstation" -> "Pizza Oven Workstation" via string manipulation.
+    """
+    key = ws.get('localizationKey') or ws.get('workstationType')
+    if key and has_key(key, lang):
+        return display_name(key, lang)
+    return format_item_name(ws.get('m_Name', '').replace('Workstation', ' Workstation'))
+
+
 def _make_furniture_dict(item: dict) -> dict:
     """Convert a raw item dict into the furniture API format."""
     showcase_products = []
     for sid in item.get('itemsThatCanShowcase', []):
         prod = _items_by_id.get(sid)
         if prod:
-            showcase_products.append(format_item_name(prod['m_Name']))
+            showcase_products.append(item_name(prod))
 
     return {
         'item_name': item['m_Name'],
-        'display_name': format_item_name(item['m_Name']),
+        'display_name': item_name(item),
         'added_customers_per_hour': item.get('addedCustomersPerHour', 0),
         'price': item.get('defaultMarketPrice', 0.0),
         'wholesale_price': item.get('wholesalePrice', 0.0),
@@ -600,7 +623,7 @@ def get_products_for_business(business_name: str) -> List[dict]:
         item = _items_by_id.get(prod['itemName'])
         if item:
             products.append({
-                'name': format_item_name(item['m_Name']),
+                'name': item_name(item),
                 'internal_name': item['m_Name'],
                 'wholesale': item.get('wholesalePrice', 0.0),
                 'market': item.get('defaultMarketPrice', 0.0),
@@ -694,7 +717,7 @@ def get_all_products_with_margins() -> List[dict]:
             if pid not in product_businesses:
                 product_businesses[pid] = []
             product_businesses[pid].append({
-                'business': format_item_name(bt['m_Name']),
+                'business': business_type_name(bt),
                 'impact': round(prod.get('impact', 1.0), 2),
             })
 
@@ -709,7 +732,7 @@ def get_all_products_with_margins() -> List[dict]:
         margin_pct = (margin / wholesale * 100) if wholesale > 0 else 0.0
 
         results.append({
-            'name': format_item_name(item['m_Name']),
+            'name': item_name(item),
             'internal_name': item['m_Name'],
             'wholesale': round(wholesale, 2),
             'market': round(market, 2),
@@ -761,7 +784,7 @@ def get_business_comparison_data() -> List[dict]:
         avg_daily = sum(daily_mults) / len(daily_mults) if daily_mults else 0
 
         results.append({
-            'name': format_item_name(name),
+            'name': business_type_name(bt),
             'internal_name': name,
             'category': category,
             'n_products': len(products),
@@ -785,7 +808,7 @@ def get_business_comparison_data() -> List[dict]:
 def _item_display(item_id: str) -> str:
     """Display name for a 'ba:itemname_*' id, falling back to the id itself."""
     item = _items_by_id.get(item_id)
-    return format_item_name(item['m_Name']) if item else _format_ba_id(item_id)
+    return item_name(item) if item else _format_ba_id(item_id)
 
 
 def get_factory_workstations() -> List[dict]:
@@ -810,7 +833,7 @@ def get_factory_workstations() -> List[dict]:
             })
         result.append({
             'name': ws['m_Name'],
-            'display_name': format_item_name(ws['m_Name'].replace('Workstation', ' Workstation')),
+            'display_name': workstation_name(ws),
             'machines': machines,
             'total_machine_cost': total_cost,
             'recipes': list(ws.get('supportedRecipes', [])),
