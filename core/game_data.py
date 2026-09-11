@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .localization import display_name, has_key
+
 
 # ============================================================================
 # CONSTANTS (from game's enum definitions - stable across updates)
@@ -199,6 +201,70 @@ def _display_to_internal(display_name: str) -> str:
 def display_to_internal(display_name: str) -> str:
     """Public wrapper: convert display name to internal CamelCase name."""
     return _display_to_internal(display_name)
+
+
+# ============================================================================
+# LOCALIZED DISPLAY NAMES (via en.json)
+# ----------------------------------------------------------------------------
+# Preferred over format_item_name() and DISPLAY_NAME_OVERRIDES:
+# - en.json is the game's own source of truth (updated by the developer)
+# - covers 401/403 items and 44/44 business types verbatim, with
+#   in-game commercial names (e.g. Smartphone1 -> "Arty Fish Phone")
+# - falls back cleanly to the old CamelCase regex for the ~2 marginal
+#   items en.json does not carry
+# ============================================================================
+
+def item_name(item: dict, lang: str = "en") -> str:
+    """Display name of an item, preferring the game's own locale file.
+
+    Come funziona
+    -------------
+    1. Se `item` ha il campo `itemName` (formato "ba:itemname_<slug>"),
+       proviamo a risolverlo con display_name() sul file en.json.
+    2. Se en.json non ha quella voce (rari item legacy / rimossi), cadiamo
+       su format_item_name(item['m_Name']) — la vecchia regex CamelCase.
+    3. Se anche `m_Name` manca, ritorniamo stringa vuota (edge case
+       teorico: un item malformato).
+
+    Perché il fallback e non `display_name(..., default=...)`
+    ---------------------------------------------------------
+    display_name() ha un default statico. Qui il fallback deve essere
+    CALCOLATO (regex sul m_Name), quindi ci serve prima has_key() per
+    decidere che strada prendere. È il pattern:
+
+        if resource_A.has(key):
+            return resource_A.get(key)
+        return resource_B.derive(key)
+
+    ...comune quando hai due sorgenti con priorità diversa.
+
+    Args:
+        item: dict di un item come restituito da _items_by_id / _items_by_name.
+            Deve avere almeno una delle chiavi `itemName` o `m_Name`.
+        lang: codice lingua (default "en"). Passa "it" per italiano ecc.
+    """
+    key = item.get('itemName')
+    if key and has_key(key, lang):
+        return display_name(key, lang)
+    # Fallback: nome CamelCase derivato dal m_Name
+    return format_item_name(item.get('m_Name', ''))
+
+
+def business_type_name(bt: dict, lang: str = "en") -> str:
+    """Display name of a business type, preferring en.json.
+
+    Stesso pattern di item_name(): en.json prima, fallback su format_item_name.
+    Copertura misurata: 44/44 business types risolti da en.json — il fallback
+    è teorico, ma resta per resilienza a future variazioni.
+
+    Il campo che porta la chiave locale è `businessTypeName` (non `itemName`
+    come per gli items). Il gioco tiene i due namespace separati anche
+    a livello di JSON estratto.
+    """
+    key = bt.get('businessTypeName')
+    if key and has_key(key, lang):
+        return display_name(key, lang)
+    return format_item_name(bt.get('m_Name', ''))
 
 
 def _make_furniture_dict(item: dict) -> dict:

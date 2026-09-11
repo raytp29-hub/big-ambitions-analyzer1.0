@@ -103,3 +103,29 @@ def display_name(key: str, lang: str = "en", default: str | None = None) -> str:
     if default is None:
         return data.get(key, key)
     return data.get(key, default)
+
+
+def has_key(key: str, lang: str = "en") -> bool:
+    """True se `key` esiste nel file di localizzazione della lingua `lang`.
+
+    A cosa serve
+    ------------
+    display_name() ha un fallback "silenzioso" (ritorna la chiave o il default
+    se manca la voce). Quindi guardando il valore che torna NON puoi capire
+    se la voce esisteva davvero o se stai vedendo il fallback.
+
+    has_key() risponde a quella domanda in modo esplicito. Serve quando devi
+    scegliere fra due sorgenti di dati diverse: es. game_data.item_name()
+    prova prima en.json; se la chiave manca, cade su format_item_name()
+    (CamelCase → "Camel Case") come fallback. Senza has_key non potresti
+    distinguere "en.json non ha questa voce" da "en.json ha questa voce e
+    il valore è la chiave stessa".
+
+    Perché non `_load(lang).get(key) is not None`
+    ---------------------------------------------
+    Fa la stessa cosa, ma has_key è la firma leggibile che documenta l'intento
+    di chi legge. È un principio di API design: quando un'operazione ha un
+    nome comune ("esiste?"), meglio esporla come funzione dedicata invece di
+    delegarla a chi la usa scrivendola ogni volta come espressione grezza.
+    """
+    return key in _load(lang)
