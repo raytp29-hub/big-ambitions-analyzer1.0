@@ -2,6 +2,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path
 from core.data_cleaner import clean_big_ambitions_csv
+from core.hsg_reader import load_save, Save, SaveFormatError
+from core.localization import display_name
+from collections import defaultdict
 import pandas as pd
 
 
@@ -98,3 +101,111 @@ def _load_from_csv(path: Path) -> DataBundle:
     return DataBundle(transactions=df, source="csv")
 
 
+def _tx_data_dict(save: Save, tx_data_ref) -> dict[str, str]:
+    """
+    Appiattisce transactionData (Dictionary<string,string>) in un dict Python.
+    Formato di partenza: {"$items": [{"$k": "businessName", "$v": "BurgerJoint"}, ...]}
+    Ritorna: {"businessName": "BurgerJoint", ...} — vuoto se il campo manca.
+    """
+    tx_data = save.deref(tx_data_ref)
+    if not tx_data:
+        return {}
+    result = {}
+    for entry in tx_data.get("$items", []):
+        entry = save.deref(entry)
+        if entry and "$k" in entry:
+            result[entry["$k"]] = entry.get("$v") or ""
+    return result
+
+
+def _hsg_to_transactions(save: Save) -> pd.DataFrame:
+    """Estrae il ledger transazioni da save.root['Transactions']."""
+    rows = []
+    for tx in save.items(save.root.get("Transactions")):
+        if not tx:
+            continue
+        
+        ts = save.deref(tx.get("timestamp")) or {}
+        day = ts.get("Day", 0)
+        
+        # tutti i valori di transactionData in un colpo solo
+        tx_data = _tx_data_dict(save, tx.get("transactionData"))
+        description = tx_data.get("businessName", "")
+        
+        # template dal locale, poi sostituzione con format_map
+        tx_type_template = display_name(tx.get("transactionType") or "")
+        # defaultdict(str) mette "" per chiavi mancanti, evita KeyError
+        tx_type = tx_type_template.format_map(defaultdict(str, tx_data)) if tx_type_template else ""
+        
+        rows.append({
+            "description": description,
+            "day":         day,
+            "type":        tx_type,
+            "price":       tx.get("amount", 0.0),
+            "balance":     tx.get("balance", 0.0),
+        })
+    
+    df = pd.DataFrame(rows, columns=list(TRANSACTIONS_SCHEMA))
+    return df.astype(TRANSACTIONS_SCHEMA)
+
+
+
+def _hsg_to_item_sales(save: Save) -> pd.DataFrame:
+    """Estrae per-shop × per-item × per-day sales da BuildingRegistrations."""
+    rows = []
+    for building in save.items(save.root.get("BuildingRegistrations")):
+        if not building or not building.get("RentedByPlayer"):
+            continue
+        business_name = building.get("BusinessName") or ""
+        
+        # orderHistory.$items = lista di OrderHistoryEntry per-day
+        for order_day in save.items(building.get("orderHistory")):
+            if not order_day:
+                continue
+            day = order_day.get("dayNumber", 0)
+            
+            # itemSales.$items = lista di ItemReport per-item-di-quel-giorno
+            for item in save.items(order_day.get("itemSales")):
+                if not item:
+                    continue
+                rows.append({
+                    "business_name":         business_name,
+                    "day":                   day,
+                    "item_key":              item.get("itemName") or "",
+                    "amount_sold":           item.get("amountSold", 0),
+                    "total_price":           item.get("totalPrice", 0.0),
+                    "total_wholesale_price": item.get("totalWholesalePrice", 0.0),
+                })
+    
+    df = pd.DataFrame(rows, columns=list(ITEM_SALES_SCHEMA))
+    return df.astype(ITEM_SALES_SCHEMA)
+
+
+
+def _load_from_hsg(path: Path) -> DataBundle:
+    """Legge un save .hsg e produce un DataBundle."""
+    try:
+        save = load_save(str(path))
+    except SaveFormatError as e:
+        raise ValueError(f"Corrupt .hsg file: {e}") from e
+    except OSError as e:
+        raise ValueError(f"Cannot read save file: {e}") from e
+    
+    build = save.root.get("buildNumberAtLastSave")
+    if build is None:
+        raise ValueError("Save file has no 'buildNumberAtLastSave' field")
+    if build < 3540:
+        raise ValueError(
+            f"Save too old: build {build} < 3540 required. "
+            "Load and re-save the file in the current game version."
+        )
+    
+    transactions = _hsg_to_transactions(save)
+    item_sales = _hsg_to_item_sales(save)
+    
+    return DataBundle(
+        transactions=transactions,
+        source="hsg",
+        item_sales=item_sales,
+    )
+    
