@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
+from pathlib import Path
+from core.data_cleaner import clean_big_ambitions_csv
 import pandas as pd
 
 
@@ -55,7 +57,7 @@ class DataBundle:
     
     def __post_init__(self) -> None:  
         if self.source not in VALID_SOURCES:
-            raise ValueError("source must be one of {VALID_SOURCES}, got {self.source!r}")
+            raise ValueError(f"source must be one of {VALID_SOURCES}, got {self.source!r}")
                 
         _validate_df(self.transactions, "transactions", TRANSACTIONS_SCHEMA)
         
@@ -67,3 +69,32 @@ class DataBundle:
             _validate_df(self.item_sales, "item_sales", ITEM_SALES_SCHEMA)
         
         
+        
+        
+def load_data(path: Path | str) -> DataBundle:
+    path = Path(path)
+    ext = path.suffix.lower()
+    
+    if ext == ".csv":
+        return _load_from_csv(path)
+    if ext == ".hsg":
+        return _load_from_hsg(path)
+    
+    
+    raise ValueError(f"Unsupported file exention: {ext!r}. Expected '.csv' or '.hsg'")
+
+
+def _load_from_csv(path: Path) -> DataBundle:
+    file_bytes = path.read_bytes()
+    df, error = clean_big_ambitions_csv(file_bytes)
+    
+    
+    if error is not None:
+        raise ValueError(f"CSV parse error: {error}")
+    if df is None:
+        raise ValueError(f"CSV parse returned no DataFrame for {path.name}")
+    
+    df = df.astype(TRANSACTIONS_SCHEMA)
+    return DataBundle(transactions=df, source="csv")
+
+
