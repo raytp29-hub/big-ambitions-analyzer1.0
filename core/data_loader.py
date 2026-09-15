@@ -11,6 +11,31 @@ import pandas as pd
 
 
 
+# Mapping: ba:transaction_* → CSV `type` string.
+# Ricostruita a mano perché il gioco non localizza queste chiavi in en.json
+# (enum hardcoded C#). Peter nel suo dashboard usa solo ba:transaction_deposit,
+# non ha una mapping table completa. Estendere quando trovi chiavi non mappate.
+_TX_TYPE_MAP: dict[str, str] = {
+    "ba:transaction_banknegativeinterestrate": "Bank Negative Interest Rate",
+    "ba:transaction_deliverycontract":         "Delivery Contract",
+    "ba:transaction_deposit":                  "Deposit",
+    "ba:transaction_electricscooterfee":       "Electric Scooter",
+    "ba:transaction_entrancefee":              "Entrance Fee",
+    "ba:transaction_healthinsurance":          "Health Insurance",
+    "ba:transaction_hrtraining":               "HR Training",
+    "ba:transaction_importdelivery":           "Import Delivery",
+    "ba:transaction_itempurchase":             "Item Purchase",
+    "ba:transaction_itemsold":                 "Item Sold",
+    "ba:transaction_marketing":                "Marketing",
+    "ba:transaction_purchasefromsellerstand":  "Purchase from Stand",
+    "ba:transaction_rent":                     "Rent",
+    "ba:transaction_replacementwage":          "Replacement Wage",
+    "ba:transaction_revenue":                  "Revenue",
+    "ba:transaction_subwayride":               "Subway Ride",
+    "ba:transaction_taxiride":                 "Taxi Ride",
+    "ba:transaction_wage":                     "Wage",
+}
+
 TRANSACTIONS_SCHEMA: dict[str, str] = {
     "description": "string",
     "day":         "int32",
@@ -128,14 +153,20 @@ def _hsg_to_transactions(save: Save) -> pd.DataFrame:
         ts = save.deref(tx.get("timestamp")) or {}
         day = ts.get("Day", 0)
         
-        # tutti i valori di transactionData in un colpo solo
         tx_data = _tx_data_dict(save, tx.get("transactionData"))
-        description = tx_data.get("businessName", "")
         
-        # template dal locale, poi sostituzione con format_map
-        tx_type_template = display_name(tx.get("transactionType") or "")
-        # defaultdict(str) mette "" per chiavi mancanti, evita KeyError
-        tx_type = tx_type_template.format_map(defaultdict(str, tx_data)) if tx_type_template else ""
+        # transactionType è ba:transaction_* — mappato a nome CSV via _TX_TYPE_MAP.
+        # Fallback: chiave grezza (rende ovvio quando manca dal mapping).
+        tx_type_key = tx.get("transactionType") or ""
+        tx_type = _TX_TYPE_MAP.get(tx_type_key, tx_type_key)
+        
+        # description = template en.json renderizzato via format_map
+        # (stesso transactionType, ma passato per il locale + expansion)
+        tx_template = display_name(tx_type_key)
+        description = (
+            tx_template.format_map(defaultdict(str, tx_data))
+            if tx_template else ""
+        )
         
         rows.append({
             "description": description,
