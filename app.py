@@ -12,6 +12,8 @@ from analysis.revenue_analyzer import extract_business_from_revenue
 from analysis.profit_loss import calculate_profit_loss
 import plotly.graph_objects as go
 import plotly.express as px
+import tempfile
+from core.data_loader import load_data
 
 # Import Schedule Optimizer page
 from visualization.schedule_page import render_schedule_optimizer_page
@@ -55,56 +57,88 @@ with st.sidebar:
 
 
     st.markdown("### 📂 Data Source")
-        
-        # Check if data exists in session state
-    if "df" not in st.session_state:
-            st.session_state.df = None
-            
-        # Sidebar Uploader (Global)
-    uploaded_file = st.file_uploader(
-            "Upload CSV/XLSM",
-            type=['csv', 'xlsm'],
-            help="Upload once, use everywhere!",
-            key="main_uploader"
-        )
-        
-    if uploaded_file is not None:
-            # Only reload if it's a new file or we don't have data yet
-            # (Streamlit re-runs script on interaction, so we need to be careful not to re-process unnecessarily if we cached it)
-            # Actually with st.cache_data it is fast, but we want to store in session_state.
-            
-            file_content = uploaded_file.getvalue()
-            df, error = clean_big_ambitions_csv(file_content)
-            
-            if error:
-                st.error(f"Error: {error}")
-            else:
-                st.session_state.df = df
-                st.success(f"Loaded {len(df)} rows!")
-        
-        # Demo dataset: lets people without the game try the tool
-    if st.session_state.df is None:
-            _sample_path = Path(__file__).parent / "sample_data" / "Transactions_sample.csv"
-            if _sample_path.exists():
-                if st.button("Test it (Demo Data)",
-                             help="Load a sample Transactions export from the game — no upload needed"):
-                    _df, _error = clean_big_ambitions_csv(_sample_path.read_bytes())
-                    if _error:
-                        st.error(f"Error: {_error}")
-                    else:
-                        st.session_state.df = _df
-                        st.session_state.is_sample_data = True
-                        st.rerun()
 
-        # Show current data status
+    # Session state init
+    if "df" not in st.session_state:
+        st.session_state.df = None
+    if "bundle" not in st.session_state:
+        st.session_state.bundle = None
+
+    # Uploader — accetta .hsg (nuovo), .csv, .xlsm
+    uploaded_file = st.file_uploader(
+        "Upload save (.hsg) or transactions (.csv)",
+        type=['csv', 'hsg', 'xlsm'],
+        help=(
+            "**HSG (recommended)** — full save file, includes per-item sales.\n\n"
+            "**CSV / XLSM** — transactions ledger only."
+        ),
+        key="main_uploader"
+    )
+
+    with st.expander("ℹ️ Where do I find my save file?"):
+        st.markdown(
+            "**Windows**: `%APPDATA%\\LocalLow\\Hovgaard Games\\Big Ambitions\\SaveGames\\<user_id>\\`\n\n"
+            "The `<user_id>` folder is base64-encoded (looks like `gI7Ndw0UqE+x4dDT1gqOiQ==`). "
+            "Inside you'll find your `.hsg` files.\n\n"
+            "**Tip**: file names match the save game name you set in-game."
+        )
+
+    if uploaded_file is not None:
+        # Bridge Streamlit bytes → filesystem path for load_data
+        suffix = Path(uploaded_file.name).suffix.lower()
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = Path(tmp.name)
+
+        try:
+            bundle = load_data(tmp_path)
+            st.session_state.bundle = bundle
+            st.session_state.df = bundle.transactions  # backward compat
+            st.session_state.is_sample_data = False
+
+            if bundle.source == "hsg":
+                st.success(
+                    f"✅ HSG loaded: {len(bundle.transactions)} txns + "
+                    f"{len(bundle.item_sales)} item sales"
+                )
+            else:
+                st.success(f"✅ CSV loaded: {len(bundle.transactions)} txns")
+        except ValueError as e:
+            st.error(f"Error: {e}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    # Demo dataset (invariato come flusso, ora passa da load_data)
+    if st.session_state.df is None:
+        _sample_path = Path(__file__).parent / "sample_data" / "Transactions_sample.csv"
+        if _sample_path.exists():
+            if st.button(
+                "Test it (Demo Data)",
+                help="Load a sample Transactions export from the game — no upload needed"
+            ):
+                try:
+                    bundle = load_data(_sample_path)
+                    st.session_state.bundle = bundle
+                    st.session_state.df = bundle.transactions
+                    st.session_state.is_sample_data = True
+                    st.rerun()
+                except ValueError as e:
+                    st.error(f"Error loading sample: {e}")
+
+    # Status attuale
     if st.session_state.df is not None:
-            st.caption(f"✅ Active Data: {len(st.session_state.df)} txns")
-            if st.session_state.get("is_sample_data"):
-                st.caption("Sample data (demo)")
-            if st.button("🗑️ Clear Data"):
-                st.session_state.df = None
-                st.session_state.is_sample_data = False
-                st.rerun()
+        bundle = st.session_state.bundle
+        source_label = "HSG" if bundle and bundle.source == "hsg" else "CSV"
+        st.caption(f"✅ Active Data: {len(st.session_state.df)} txns ({source_label})")
+        if bundle and bundle.source == "hsg" and bundle.item_sales is not None:
+            st.caption(f"➕ {len(bundle.item_sales)} item sales")
+        if st.session_state.get("is_sample_data"):
+            st.caption("Sample data (demo)")
+        if st.button("🗑️ Clear Data"):
+            st.session_state.df = None
+            st.session_state.bundle = None
+            st.session_state.is_sample_data = False
+            st.rerun()
     st.markdown("---")
     
     # Status info
