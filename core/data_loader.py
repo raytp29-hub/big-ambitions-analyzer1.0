@@ -53,6 +53,14 @@ ITEM_SALES_SCHEMA: dict[str, str] = {
         "total_wholesale_price": "float64",    # bonus scoperta ieri: sblocca margine
     }
 
+
+HOUR_REPORTS_SCHEMA: dict[str, str] = {
+        "business_name": "string",
+        "day":           "int32",
+        "hour":          "int32",   # 0-23
+        "customers":     "int32",
+    }
+
 VALID_SOURCES = {"hsg", "csv"}
 
 
@@ -96,6 +104,13 @@ class DataBundle:
         if self.item_sales is not None:
             _validate_df(self.item_sales, "item_sales", ITEM_SALES_SCHEMA)
         
+        # === hour_reports ===
+        if self.source == "csv" and self.hour_reports is not None:
+            raise ValueError(f"hour_reports must be None when source='csv' "
+        f"(got a DataFrame with {len(self.hour_reports)} rows)")
+        
+        if self.hour_reports is not None:
+            _validate_df(self.hour_reports, "hour_reports", HOUR_REPORTS_SCHEMA)
         
         
         
@@ -212,6 +227,34 @@ def _hsg_to_item_sales(save: Save) -> pd.DataFrame:
     return df.astype(ITEM_SALES_SCHEMA)
 
 
+def _hsg_to_hour_reports(save: Save) -> pd.DataFrame:
+    """Estrae per-shop × per-hour × per-day customer count da BuildingRegistrations."""
+    rows = []
+    for building in save.items(save.root.get("BuildingRegistrations")):
+        if not building or not building.get("RentedByPlayer"):
+            continue
+        business_name = building.get("BusinessName") or ""
+        
+        # orderHistory.$items = lista di OrderHistoryEntry per-day
+        for order_day in save.items(building.get("orderHistory")):
+            if not order_day:
+                continue
+            day = order_day.get("dayNumber", 0)
+            
+            # hourReports.$items = lista di HourReport (solo ore attive)
+            for hr in save.items(order_day.get("hourReports")):
+                if not hr:
+                    continue
+                rows.append({
+                    "business_name": business_name,
+                    "day":           day,
+                    "hour":          hr.get("hour", 0),
+                    "customers":     hr.get("customers", 0),
+                })
+    
+    df = pd.DataFrame(rows, columns=list(HOUR_REPORTS_SCHEMA))
+    return df.astype(HOUR_REPORTS_SCHEMA)
+
 
 def _load_from_hsg(path: Path) -> DataBundle:
     """Legge un save .hsg e produce un DataBundle."""
@@ -233,10 +276,12 @@ def _load_from_hsg(path: Path) -> DataBundle:
     
     transactions = _hsg_to_transactions(save)
     item_sales = _hsg_to_item_sales(save)
+    hour_reports = _hsg_to_hour_reports(save)
     
     return DataBundle(
         transactions=transactions,
         source="hsg",
         item_sales=item_sales,
+        hour_reports=hour_reports,
     )
     

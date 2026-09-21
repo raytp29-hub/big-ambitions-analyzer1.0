@@ -10,6 +10,8 @@ from analysis.temporal_analyzer import TemporalAnalyzer
 from core.data_cleaner import clean_big_ambitions_csv
 from analysis.revenue_analyzer import extract_business_from_revenue
 from analysis.profit_loss import calculate_profit_loss, calculate_item_margin
+from analysis.temporal_analyzer import TemporalAnalyzer
+from analysis.temporal_analyzer import TemporalAnalyzer, calculate_hourly_traffic
 import plotly.graph_objects as go
 import plotly.express as px
 import tempfile
@@ -77,8 +79,8 @@ with st.sidebar:
 
     with st.expander("ℹ️ Where do I find my save file?"):
         st.markdown(
-            "**Windows**: `%APPDATA%\\LocalLow\\Hovgaard Games\\Big Ambitions\\SaveGames\\<user_id>\\`\n\n"
-            "The `<user_id>` folder is base64-encoded (looks like `gI7Ndw0UqE+x4dDT1gqOiQ==`). "
+            "**Windows**: `%USERPROFILE%\AppData\LocalLow\Hovgaard Games\Big Ambitions\SaveGames\Big Ambitions`\n\n"
+            "The file looks like (`gI7Ndw0UqE+x4dDT1gqOiQ==`). "
             "Inside you'll find your `.hsg` files.\n\n"
             "**Tip**: file names match the save game name you set in-game."
         )
@@ -851,6 +853,79 @@ else:
                             _fig_im.update_yaxes(tickformat="$,.0f")
                             _fig_im.update_layout(xaxis_tickangle=-30, height=420)
                             st.plotly_chart(_fig_im, use_container_width=True)
+
+                                        # === HOURLY CUSTOMER TRAFFIC (Fase 3a di Track 1) ===
+                    st.subheader("Hourly Customer Traffic")
+                    _bundle_hr = st.session_state.get("bundle")
+                    if _bundle_hr is None or _bundle_hr.hour_reports is None or _bundle_hr.hour_reports.empty:
+                        st.info(
+                            "Hourly customer traffic requires an HSG save file. "
+                            "Load one from the sidebar to unlock this section."
+                        )
+                    else:
+                        _hr_df = _bundle_hr.hour_reports
+                        _hr_businesses = sorted(_hr_df["business_name"].dropna().unique().tolist())
+                        _hr_pick = st.selectbox(
+                            "Business",
+                            ["All businesses"] + _hr_businesses,
+                            key="hourly_traffic_business_filter",
+                        )
+                        _hr_filter = None if _hr_pick == "All businesses" else _hr_pick
+
+                        _hr_agg = calculate_hourly_traffic(_hr_df, business_filter=_hr_filter)
+
+                        if _hr_agg.empty:
+                            st.warning("No hourly traffic data for this selection.")
+                        else:
+                            # Metric tiles
+                            m1, m2, m3 = st.columns(3)
+                            _peak_row = _hr_agg.loc[_hr_agg["avg_customers"].idxmax()]
+                            m1.metric(
+                                "Peak hour",
+                                f"{int(_peak_row['hour']):02d}:00",
+                                f"{_peak_row['avg_customers']:.1f} avg customers",
+                            )
+                            m2.metric(
+                                "Avg customers / hour",
+                                f"{_hr_agg['avg_customers'].mean():.1f}",
+                            )
+                            _peak_biz = (
+                                _hr_agg.groupby("business_name", as_index=False)["total_customers"]
+                                .sum()
+                                .sort_values("total_customers", ascending=False)
+                                .iloc[0]
+                            )
+                            m3.metric(
+                                "Busiest business",
+                                _peak_biz["business_name"],
+                                f"{int(_peak_biz['total_customers']):,} total customers",
+                            )
+
+                            # Line chart
+                            _show_color = (_hr_filter is None)
+                            _fig_hr = px.line(
+                                _hr_agg,
+                                x="hour",
+                                y="avg_customers",
+                                color="business_name" if _show_color else None,
+                                markers=True,
+                                title="Average customers per hour",
+                                labels={
+                                    "hour":          "Hour of day",
+                                    "avg_customers": "Avg customers",
+                                    "business_name": "Business",
+                                },
+                            )
+                            _fig_hr.update_xaxes(
+                                tickmode="linear",
+                                tick0=0,
+                                dtick=1,
+                                range=[-0.5, 23.5],
+                            )
+                            _fig_hr.update_layout(height=420)
+                            st.plotly_chart(_fig_hr, use_container_width=True)
+
+
 
                     # === TEMPORAL ANALYSIS ===
                     st.header("📈 Temporal Analysis")

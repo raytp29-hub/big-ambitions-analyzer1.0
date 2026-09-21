@@ -128,6 +128,64 @@ def calculate_profit_loss(df):
     
     
     
+def calculate_item_margin(item_sales: pd.DataFrame, business_filter: Optional[str] = None) -> pd.DataFrame:
+    """
+    Aggrega item_sales per (business, item_key) e ritorna un DataFrame con
+    revenue/cost/margin/margin_pct/units/avg_price_per_unit.
+    ...
+    """
+    
+    if business_filter is not None:
+        item_sales = item_sales[item_sales['business_name'] == business_filter]
+            
+    
+    
+    if item_sales.empty:
+        return pd.DataFrame({
+            'business_name': pd.Series(dtype=str),
+            'item_key': pd.Series(dtype=str),
+            'item_display': pd.Series(dtype=str),
+            'units_sold': pd.Series(dtype=int),
+            'revenue': pd.Series(dtype=float),
+            'cost': pd.Series(dtype=float),
+            'margin': pd.Series(dtype=float),
+            'margin_pct': pd.Series(dtype=float),
+            'avg_price_per_unit': pd.Series(dtype=float)            
+        })
+    
+    
+    agg = item_sales.groupby(['business_name', 'item_key'], as_index=False).agg(
+        units_sold=('amount_sold', 'sum'),
+        revenue=('total_price', 'sum'),
+        cost=('total_wholesale_price', 'sum'),
+    )
+        
+    agg['margin'] = agg['revenue'] - agg['cost']
+    
+    agg['margin_pct'] = np.where(
+        agg['revenue'] > 0,
+        agg['margin'] / agg['revenue'] * 100,
+        np.nan
+    )
+    
+    agg['avg_price_per_unit'] = np.where(
+    agg['units_sold'] > 0,
+    agg['revenue'] / agg['units_sold'],
+    np.nan
+    )
+    
+    
+    agg['item_display'] = agg['item_key'].apply(lambda k: display_name(k, 'en'))
+    
+    agg = agg.sort_values('margin', ascending=False).reset_index(drop=True)
+    
+    
+    return agg[[
+    'business_name', 'item_key', 'item_display',
+    'units_sold', 'revenue', 'cost',
+    'margin', 'margin_pct', 'avg_price_per_unit',
+    ]]
+    
     
     
     

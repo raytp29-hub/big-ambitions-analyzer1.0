@@ -246,3 +246,52 @@ class TemporalAnalyzer:
 
         # Step 8: Formatta e ritorna
         return comparison_df
+    
+    
+    
+    
+def calculate_hourly_traffic(
+    hour_reports: pd.DataFrame,
+    business_filter: str | None = None,
+) -> pd.DataFrame:
+    """
+    Aggrega hour_reports per (business, hour) restituendo customer traffic metrics.
+
+    Args:
+        hour_reports: DataFrame conforme a HOUR_REPORTS_SCHEMA (business_name, day, hour, customers).
+        business_filter: se passato, restringe a un singolo business prima dell'aggregazione.
+
+    Returns:
+        DataFrame con colonne:
+        - business_name (str)
+        - hour (int, 0-23)
+        - avg_customers (float): media clienti in quell'ora, sui giorni in cui il business è stato attivo
+        - total_customers (int): somma totale clienti in quell'ora su tutti i giorni
+        - days_open (int): numero di giorni distinti in cui il business ha visto clienti in quell'ora
+        Ordinato per (business_name, hour).
+    """
+
+    if business_filter is not None:
+        hour_reports = hour_reports[hour_reports["business_name"] == business_filter]
+
+    if hour_reports.empty:
+        return pd.DataFrame({
+            "business_name":   pd.Series(dtype=str),
+            "hour":            pd.Series(dtype=int),
+            "avg_customers":   pd.Series(dtype=float),
+            "total_customers": pd.Series(dtype=int),
+            "days_open":       pd.Series(dtype=int),
+        })
+
+    agg = hour_reports.groupby(["business_name", "hour"], as_index=False).agg(
+        total_customers=("customers", "sum"),
+        days_open=("customers", "count"),
+    )
+    agg["avg_customers"] = agg["total_customers"] / agg["days_open"]
+
+    agg = agg.sort_values(["business_name", "hour"]).reset_index(drop=True)
+
+    return agg[[
+        "business_name", "hour",
+        "avg_customers", "total_customers", "days_open",
+    ]]
