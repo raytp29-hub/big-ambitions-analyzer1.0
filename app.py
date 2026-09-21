@@ -9,7 +9,7 @@ import numpy as np
 from analysis.temporal_analyzer import TemporalAnalyzer
 from core.data_cleaner import clean_big_ambitions_csv
 from analysis.revenue_analyzer import extract_business_from_revenue
-from analysis.profit_loss import calculate_profit_loss
+from analysis.profit_loss import calculate_profit_loss, calculate_item_margin
 import plotly.graph_objects as go
 import plotly.express as px
 import tempfile
@@ -763,7 +763,95 @@ else:
                     except Exception as e:
                         st.error(f"❌ Error calculating P&L: {str(e)}")
                         st.info("💡 This might happen if there are data inconsistencies. Check your data!")
-                    
+
+                    # === ITEM-LEVEL MARGIN (Fase 5 di Track 1) ===
+                    # Vedi claude/feature-item-margin-plan.md
+                    st.subheader("Item-Level Margin")
+                    _bundle = st.session_state.get("bundle")
+                    if _bundle is None or _bundle.item_sales is None or _bundle.item_sales.empty:
+                        st.info(
+                            "Item-level margin requires an HSG save file. "
+                            "Load one from the sidebar to unlock this section."
+                        )
+                    else:
+                        _businesses = sorted(
+                            _bundle.item_sales["business_name"].dropna().unique().tolist()
+                        )
+                        _pick = st.selectbox(
+                            "Business",
+                            ["All businesses"] + _businesses,
+                            key="item_margin_business_filter",
+                        )
+                        _filter = None if _pick == "All businesses" else _pick
+
+                        _im = calculate_item_margin(_bundle.item_sales, business_filter=_filter)
+
+                        if _im.empty:
+                            st.warning("No item sales for this selection.")
+                        else:
+                            _show_business_col = _filter is None
+                            _display_cols = ["item_display"]
+                            if _show_business_col:
+                                _display_cols.append("business_name")
+                            _display_cols += [
+                                "units_sold", "revenue", "cost",
+                                "margin", "margin_pct", "avg_price_per_unit",
+                            ]
+
+                            _pretty = _im[_display_cols].rename(columns={
+                                "item_display":       "Item",
+                                "business_name":      "Business",
+                                "units_sold":         "Units sold",
+                                "revenue":            "Revenue",
+                                "cost":               "Cost",
+                                "margin":             "Margin $",
+                                "margin_pct":         "Margin %",
+                                "avg_price_per_unit": "Avg price / unit",
+                            })
+
+                            st.dataframe(
+                                _pretty.style.format({
+                                    "Units sold":       "{:,.0f}",
+                                    "Revenue":          "${:,.2f}",
+                                    "Cost":             "${:,.2f}",
+                                    "Margin $":         "${:,.2f}",
+                                    "Margin %":         lambda v: "—" if pd.isna(v) else f"{v:.1f}%",
+                                    "Avg price / unit": lambda v: "—" if pd.isna(v) else f"${v:,.2f}",
+                                }),
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+
+                            _top = _im.iloc[0]
+                            _top_pct = (
+                                f" ({_top['margin_pct']:.1f}% margin)"
+                                if pd.notna(_top['margin_pct']) else ""
+                            )
+                            st.success(
+                                f"🏆 Highest margin item: **{_top['item_display']}** in "
+                                f"**{_top['business_name']}** — "
+                                f"${_top['margin']:,.2f}{_top_pct}"
+                            )
+
+                            # Bar chart top-10 per margin $
+                            _top10 = _im.head(10).copy()
+                            _color = "business_name" if _show_business_col else None
+                            _fig_im = px.bar(
+                                _top10,
+                                x="item_display",
+                                y="margin",
+                                color=_color,
+                                title="Top 10 items by margin",
+                                labels={
+                                    "item_display":  "Item",
+                                    "margin":        "Margin ($)",
+                                    "business_name": "Business",
+                                },
+                            )
+                            _fig_im.update_yaxes(tickformat="$,.0f")
+                            _fig_im.update_layout(xaxis_tickangle=-30, height=420)
+                            st.plotly_chart(_fig_im, use_container_width=True)
+
                     # === TEMPORAL ANALYSIS ===
                     st.header("📈 Temporal Analysis")
                     

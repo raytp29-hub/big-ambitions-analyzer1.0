@@ -1,7 +1,9 @@
 import pandas as pd
-from typing import Tuple, List
+import numpy as np
+from typing import Tuple, List, Optional
 from .revenue_analyzer import extract_business_from_revenue
 from core.transaction_categories import categorize_transaction
+from core.localization import display_name
 
 
 
@@ -262,3 +264,107 @@ def calculate_shared_costs(df: pd.DataFrame) -> Tuple[float, float]:
             total_equal_split += price
     
     return total_revenue_based, total_equal_split
+
+# ============================================================================
+# ITEM-LEVEL MARGIN (Fase 5 di Track 1 — vedi claude/feature-item-margin-plan.md)
+# ----------------------------------------------------------------------------
+# Aggrega bundle.item_sales (disponibile solo da save .hsg) per (business, item)
+# e calcola margine assoluto e percentuale sfruttando total_wholesale_price
+# gia' presente nello schema HSG — nessun cross-join con game_data.json.
+# ============================================================================
+
+
+def calculate_item_margin(
+    item_sales: pd.DataFrame,
+    business_filter: Optional[str] = None,
+) -> pd.DataFrame:
+    """Aggrega item_sales per (business, item_key) e calcola margine.
+
+    Args:
+        item_sales: DataFrame conforme a core.data_loader.ITEM_SALES_SCHEMA
+            (business_name, day, item_key, amount_sold, total_price,
+            total_wholesale_price). Tipicamente `bundle.item_sales`.
+        business_filter: se passato, restringe l'aggregazione a quel business.
+            Passare None (default) per includere tutti i business.
+
+    Returns:
+        DataFrame ordinato per margin discendente, colonne:
+            business_name, item_key, item_display,
+            units_sold, revenue, cost, margin,
+            margin_pct (NaN se revenue == 0),
+            avg_price_per_unit (NaN se units_sold == 0)
+
+        DataFrame vuoto (schema esplicito dtype-safe) se item_sales e' vuoto
+        o se il filtro non matcha nessuna riga.
+
+    Note:
+        - margin_pct e avg_price_per_unit usano NaN come marker "non definito"
+          quando denom == 0; la UI mostra "-" (Streamlit rende NaN cosi').
+        - item_display viene risolto via core.localization.display_name che ha
+          @lru_cache: nessun I/O ripetuto anche su tabelle lunghe.
+        - Item promozionali (total_price=0, es. paperbag in fast food) entrano
+          normalmente nell'aggregato: la loro presenza e' un fatto del gioco.
+    """
+    empty_schema = {
+        "business_name":      pd.Series(dtype="string"),
+        "item_key":           pd.Series(dtype="string"),
+        "item_display":       pd.Series(dtype="string"),
+        "units_sold":         pd.Series(dtype="int64"),
+        "revenue":            pd.Series(dtype="float64"),
+        "cost":               pd.Series(dtype="float64"),
+        "margin":             pd.Series(dtype="float64"),
+        "margin_pct":         pd.Series(dtype="float64"),
+        "avg_price_per_unit": pd.Series(dtype="float64"),
+    }
+
+    if item_sales.empty:
+        return pd.DataFrame(empty_schema)
+
+    df = item_sales
+    if business_filter is not None:
+        df = df[df["business_name"] == business_filter]
+
+    if df.empty:
+        return pd.DataFrame(empty_schema)
+
+    agg = df.groupby(["business_name", "item_key"], as_index=False).agg(
+        units_sold=("amount_sold", "sum"),
+        revenue=("total_price", "sum"),
+        cost=("total_wholesale_price", "sum"),
+    )
+
+    # Cast dtype coerenti (groupby su int32 puo' promuovere a int64;
+    # esplicitiamo per contract stabile in tabella e test).
+    agg["units_sold"] = agg["units_sold"].astype("int64")
+    agg["revenue"] = agg["revenue"].astype("float64")
+    agg["cost"] = agg["cost"].astype("float64")
+
+    agg["margin"] = agg["revenue"] - agg["cost"]
+
+    # Divisione condizionale vettoriale: NaN dove il denominatore e' 0.
+    agg["margin_pct"] = np.where(
+        agg["revenue"] > 0,
+        agg["margin"] / agg["revenue"] * 100.0,
+        np.nan,
+    )
+    agg["avg_price_per_unit"] = np.where(
+        agg["units_sold"] > 0,
+        agg["revenue"] / agg["units_sold"],
+        np.nan,
+    )
+
+    # Display leggibile via en.json. Se la chiave manca, display_name torna
+    # la chiave stessa (default) — signal visivo di "manca dal locale file".
+    agg["item_display"] = agg["item_key"].apply(lambda k: display_name(k, "en"))
+
+    # Colonna business_name/item_key/item_display come StringDtype coerente.
+    for col in ("business_name", "item_key", "item_display"):
+        agg[col] = agg[col].astype("string")
+
+    agg = agg[[
+        "business_name", "item_key", "item_display",
+        "units_sold", "revenue", "cost", "margin",
+        "margin_pct", "avg_price_per_unit",
+    ]]
+
+    return agg.sort_values("margin", ascending=False).reset_index(drop=True)
