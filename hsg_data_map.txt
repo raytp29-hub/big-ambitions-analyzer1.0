@@ -1,0 +1,1329 @@
+
+==============================================================================
+0. META
+==============================================================================
+{
+  "SaveGameName": "Recover #2",
+  "Day": 253,
+  "Hour": 23,
+  "Money": 6372069.0,
+  "NetWorth": 31342912.0,
+  "buildNumberAtLastSave": 3670
+}
+
+==============================================================================
+1. PLAYER BUSINESSES — 14 su 885 building
+==============================================================================
+{"BusinessName": "Rest $ Foods", "businessTypeName": "ba:businesstype_fastfoodrestaurant", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 67.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 97, "pricing": 100, "cleanliness": 99, "facility": 100, "overall": 99}, "customerCapacity": 30, "radioStation": 1, "radioVolume": 0.3730139136314392, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 86, "takenOver": false}
+{"BusinessName": "Tech & Gifts", "businessTypeName": "ba:businesstype_electronicsstore", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 1266.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 87, "pricing": 100, "cleanliness": 99, "facility": 100, "overall": 96}, "customerCapacity": 75, "radioStation": 3, "radioVolume": 0.33448806405067444, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 45.0, "creationDay": 180, "takenOver": false}
+{"BusinessName": null, "businessTypeName": "ba:businesstype_empty", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 1455.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 50, "pricing": 50, "cleanliness": 50, "facility": 50, "overall": 50}, "customerCapacity": 0, "radioStation": 3, "radioVolume": 0.1796143800020218, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": -1, "takenOver": false}
+{"BusinessName": "Trivago", "businessTypeName": "ba:businesstype_travelagency", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 1134.0, "temporarilyClosed": true, "satisfaction": {"$type": "Satisfaction", "customerService": 50, "pricing": 50, "cleanliness": 50, "facility": 50, "overall": 50}, "customerCapacity": 50, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 246, "takenOver": false}
+{"BusinessName": "L&G", "businessTypeName": "ba:businesstype_lawfirm", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 478.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 100, "pricing": 100, "cleanliness": 100, "facility": 100, "overall": 100}, "customerCapacity": 50, "radioStation": 3, "radioVolume": 0.2274569869041443, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 155, "takenOver": false}
+{"BusinessName": "Logistic&Ray", "businessTypeName": "ba:businesstype_warehouse", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 531.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 50, "pricing": 50, "cleanliness": 50, "facility": 50, "overall": 50}, "customerCapacity": 999, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 164, "takenOver": false}
+{"BusinessName": "Gift Dreams", "businessTypeName": "ba:businesstype_giftshop", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 72.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 86, "pricing": 100, "cleanliness": 99, "facility": 100, "overall": 96}, "customerCapacity": 30, "radioStation": 3, "radioVolume": 0.4256744086742401, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 43.54166793823242, "creationDay": 59, "takenOver": false}
+{"BusinessName": "Five Fries", "businessTypeName": "ba:businesstype_fastfoodrestaurant", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 119.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 95, "pricing": 100, "cleanliness": 100, "facility": 100, "overall": 98}, "customerCapacity": 30, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 143, "takenOver": true}
+{"BusinessName": "WareHouse Ray", "businessTypeName": "ba:businesstype_warehouse", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 76.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 50, "pricing": 50, "cleanliness": 50, "facility": 50, "overall": 50}, "customerCapacity": 999, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 99, "takenOver": false}
+{"BusinessName": "Tech & Gift", "businessTypeName": "ba:businesstype_electronicsstore", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 422.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 100, "pricing": 100, "cleanliness": 100, "facility": 100, "overall": 100}, "customerCapacity": 75, "radioStation": 3, "radioVolume": 0.41305750608444214, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 45.0, "creationDay": 119, "takenOver": false}
+{"BusinessName": "Innovative Imagery", "businessTypeName": "ba:businesstype_graphicdesigner", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 389.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 87, "pricing": 100, "cleanliness": 100, "facility": 100, "overall": 96}, "customerCapacity": 10, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 1, "takenOver": true}
+{"BusinessName": "G&J", "businessTypeName": "ba:businesstype_jewelrystore", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 80.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 98, "pricing": 100, "cleanliness": 96, "facility": 100, "overall": 98}, "customerCapacity": 30, "radioStation": 3, "radioVolume": 0.5007836222648621, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 45.0, "creationDay": 100, "takenOver": false}
+{"BusinessName": "HQ Ray", "businessTypeName": "ba:businesstype_headquarters", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 110.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 50, "pricing": 50, "cleanliness": 50, "facility": 50, "overall": 50}, "customerCapacity": 50, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 99, "takenOver": false}
+{"BusinessName": "Factory", "businessTypeName": "ba:businesstype_factory", "RentedByPlayer": true, "AvailableForRent": false, "RentPerDay": 863.0, "temporarilyClosed": false, "satisfaction": {"$type": "Satisfaction", "customerService": 50, "pricing": 50, "cleanliness": 50, "facility": 50, "overall": 50}, "customerCapacity": 0, "radioStation": 0, "radioVolume": 1.0, "warnedLastHourAboutNoEmployee": false, "securityLevelPercentage": 0.0, "creationDay": 220, "takenOver": false}
+
+==============================================================================
+2. TUTTE LE CHIAVI di BuildingRegistration — Rest $ Foods
+==============================================================================
+  $type: str = 'BuildingRegistration, BigAmbitions'
+  $id: int = 6399
+  StreetName: str = 'ba:street_fifthavenue'
+  StreetNumber: int = 38
+  AvailableForRent: bool = False
+  RentedByPlayer: bool = True
+  RentPerDay: float = 67.0
+  scheduleDays: dict (List`1[[ScheduleDay, 7 items/keys)
+  temporarilyClosed: bool = False
+  BusinessName: str = 'Rest $ Foods'
+  BusinessDescription: NoneType = None
+  businessTypeName: str = 'ba:businesstype_fastfoodrestaurant'
+  Layout: NoneType = None
+  itemInstances: dict (String, 127 items/keys)
+  unprocessedCompletedOrders: dict (List`1[[Order, 0 items/keys)
+  orderHistory: dict (OrderHistoryEntry, 16 items/keys)
+  dirtSpots: dict (DirtSpot, 225 items/keys)
+  retailPrices: dict (List`1[[RetailPrice, 5 items/keys)
+  storedRetailPrices: dict (List`1[[RetailPrice, 11 items/keys)
+  lastDeposit: float = 2010.0
+  satisfaction: dict (Satisfaction, 7 items/keys)
+  promotion: dict (Promotion, 5 items/keys)
+  signAppearanceSettings: dict (SignAppearanceSettings, 5 items/keys)
+  interiorDesigns: dict (List`1[[SerializedInteriorDesign, 306 items/keys)
+  marketingCampaigns: dict (MarketingCampaign, 5 items/keys)
+  customerCapacity: int = 30
+  logoSettings: dict (LogoSettings, 7 items/keys)
+  takeoverOfferAcceptRate: float = 0.0
+  takenOver: bool = False
+  cachedAvailableProducts: dict (String, 5 items/keys)
+  cachedFulfilledCustomerDemands: dict (String, 7 items/keys)
+  creationDay: int = 86
+  lastDayOnSale: int = 0
+  stolenItemsCost: float = 0.0
+  securityLevelPercentage: float = 0.0
+  radioStation: int = 1
+  warnedLastHourAboutNoEmployee: bool = False
+  radioVolume: float = 0.3730139136314392
+  blueprintName: NoneType = None
+  buildingOwnerRivalId: str = 'HJFtA8Jq+kOZ6KHWfS8PQ=='
+  businessOwnerRivalId: str = ''
+  aiEmployees: dict (AiBusinessEmployeeData, 0 items/keys)
+  poachedEmployees: NoneType = None
+  dailyIncomes: dict (Single, 0 items/keys)
+  uniformsBySkill: dict (String, 2 items/keys)
+  factoryExports: dict (FactoryExport, 0 items/keys)
+
+==============================================================================
+2b. CAMPI ANNIDATI (primo business)
+==============================================================================
+
+--- scheduleDays ---
+{
+  "$type": "List`1[[ScheduleDay",
+  "$items_count": 7,
+  "$items": [
+    {
+      "$type": "ScheduleDay",
+      "day": 1,
+      "isOpen": false,
+      "openingHourSlots": {
+        "$type": "List`1[[OpeningHourSlot",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "OpeningHourSlot",
+            "startingHour": 11,
+            "endingHour": 24
+          }
+        ]
+      },
+      "workShifts": {
+        "$type": "List`1[[WorkShift",
+        "$items_count": 0,
+        "$items": []
+      }
+    },
+    {
+      "$type": "ScheduleDay",
+      "day": 2,
+      "isOpen": true,
+      "openingHourSlots": {
+        "$type": "List`1[[OpeningHourSlot",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "OpeningHourSlot",
+            "startingHour": 11,
+            "endingHour": 24
+          }
+        ]
+      },
+      "workShifts": {
+        "$type": "List`1[[WorkShift",
+        "$items_count": 5,
+        "$items": [
+          {
+            "$type": "WorkShift",
+            "startingHour": 16,
+            "endingHour": 21,
+            "employeeId": "mLdN3FIt5kukh3LACTloXA==",
+            "itemInstanceId": "tiywgsyYhEKASQ3sjQd++g==",
+            "type": 0
+          },
+          {
+            "$type": "WorkShift",
+            "startingHour": 11,
+            "endingHour": 18,
+            "employeeId": "UANxkF8QRkGBb3hvpqdQzw==",
+            "itemInstanceId": "53bFjTqjR0uW3W260O4mBg==",
+            "type": 1
+          },
+          {
+            "$type": "WorkShift",
+            "startingHour": 18,
+            "endingHour": 24,
+            "employeeId": "Yw3tvmqL+EySmqZA+gZszg==",
+            "itemInstanceId": "kwfiH5inJUq2bb1eZuaa7g==",
+            "type": 1
+          }
+        ]
+      }
+    },
+    {
+      "$type": "ScheduleDay",
+      "day": 3,
+      "isOpen": true,
+      "openingHourSlots": {
+        "$type": "List`1[[OpeningHourSlot",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "OpeningHourSlot",
+            "startingHour": 11,
+            "endingHour": 24
+          }
+        ]
+      },
+      "workShifts": {
+        "$type": "List`1[[WorkShift",
+        "$items_count": 5,
+        "$items": [
+          {
+            "$type": "WorkShift",
+            "startingHour": 14,
+            "endingHour": 21,
+            "employeeId": "mLdN3FIt5kukh3LACTloXA==",
+            "itemInstanceId": "tiywgsyYhEKASQ3sjQd++g==",
+            "type": 0
+          },
+          {
+            "$type": "WorkShift",
+            "startingHour": 11,
+            "endingHour": 18,
+            "employeeId": "UANxkF8QRkGBb3hvpqdQzw==",
+            "itemInstanceId": "53bFjTqjR0uW3W260O4mBg==",
+            "type": 1
+          },
+          {
+            "$type": "WorkShift",
+            "startingHour": 16,
+            "endingHour": 24,
+            "employeeId": "Yw3tvmqL+EySmqZA+gZszg==",
+            "itemInstanceId": "kwfiH5inJUq2bb1eZuaa7g==",
+            "type": 1
+          }
+        ]
+      }
+    }
+  ]
+}
+
+--- promotion ---
+{
+  "$type": "Promotion",
+  "trafficIndex": 35,
+  "marketing": 100,
+  "total": 100
+}
+
+--- uniformsBySkill ---
+{
+  "$type": "String",
+  "comparer": {
+    "$type": "String"
+  },
+  "$items_count": 2,
+  "$items": [
+    {
+      "$k": "ba:skill_customerservice",
+      "$v": "3Q+6NAt8VEWvyHMEa3b0vw=="
+    },
+    {
+      "$k": "ba:skill_cleaning",
+      "$v": "UJztLraDLEmDlyP9biEig=="
+    }
+  ]
+}
+
+--- interiorDesigns ---
+{
+  "$type": "List`1[[SerializedInteriorDesign",
+  "$items_count": 306,
+  "$items": [
+    {
+      "$type": "SerializedInteriorDesign",
+      "UUID": "lGiXhigSakOAgn7b71OYxA==",
+      "materials": {
+        "$type": "SerializedInteriorDesign+SerializableInteriorMaterial[]",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "SerializedInteriorDesign+SerializableInteriorMaterial",
+            "MaterialID": "t7Z9gwH5vkqpPuhXUkzWw==",
+            "MaterialIndex": 1,
+            "ColorIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "$type": "SerializedInteriorDesign",
+      "UUID": "fppRfMEiOkWN7AW+dQpl2Q==",
+      "materials": {
+        "$type": "SerializedInteriorDesign+SerializableInteriorMaterial[]",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "SerializedInteriorDesign+SerializableInteriorMaterial",
+            "MaterialID": "t7Z9gwH5vkqpPuhXUkzWw==",
+            "MaterialIndex": 1,
+            "ColorIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "$type": "SerializedInteriorDesign",
+      "UUID": "1vCNgwEYDkOwiceCyWr2Ig==",
+      "materials": {
+        "$type": "SerializedInteriorDesign+SerializableInteriorMaterial[]",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "SerializedInteriorDesign+SerializableInteriorMaterial",
+            "MaterialID": "t7Z9gwH5vkqpPuhXUkzWw==",
+            "MaterialIndex": 1,
+            "ColorIndex": 1
+          }
+        ]
+      }
+    }
+  ]
+}
+
+--- marketingCampaigns ---
+{
+  "$type": "MarketingCampaign",
+  "$items_count": 5,
+  "$items": [
+    {
+      "$type": "MarketingCampaign",
+      "agencyAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_secondavenue",
+        "streetNumber": 5
+      },
+      "marketingTypeName": 3,
+      "enabled": false
+    },
+    {
+      "$type": "MarketingCampaign",
+      "agencyAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_thirdavenue",
+        "streetNumber": 17
+      },
+      "marketingTypeName": 1,
+      "enabled": false
+    },
+    {
+      "$type": "MarketingCampaign",
+      "agencyAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_secondavenue",
+        "streetNumber": 5
+      },
+      "marketingTypeName": 4,
+      "enabled": true
+    }
+  ]
+}
+
+--- dailyIncomes ---
+{
+  "$type": "Single",
+  "$items_count": 0,
+  "$items": []
+}
+
+--- aiEmployees ---
+{
+  "$type": "AiBusinessEmployeeData",
+  "$items_count": 0,
+  "$items": []
+}
+
+--- cachedFulfilledCustomerDemands ---
+{
+  "$type": "String",
+  "$items_count": 7,
+  "$items": [
+    "ba:customerdemand_music",
+    "ba:customerdemand_employeeuniforms",
+    "ba:customerdemand_interiordesign"
+  ]
+}
+
+--- retailPrices ---
+{
+  "$type": "List`1[[RetailPrice",
+  "$items_count": 5,
+  "$items": [
+    {
+      "$type": "RetailPrice",
+      "itemName": "ba:itemname_sodacan",
+      "price": 2.119999885559082
+    },
+    {
+      "$type": "RetailPrice",
+      "itemName": "ba:itemname_frenchfries",
+      "price": 8.020000457763672
+    },
+    {
+      "$type": "RetailPrice",
+      "itemName": "ba:itemname_salad",
+      "price": 16.690000534057617
+    }
+  ]
+}
+
+==============================================================================
+3. itemInstances — conteggio per business
+==============================================================================
+  Rest $ Foods (ba:businesstype_fastfoodrestaurant): 127 itemInstances
+  Tech & Gifts (ba:businesstype_electronicsstore): 307 itemInstances
+  None (ba:businesstype_empty): 209 itemInstances
+  Trivago (ba:businesstype_travelagency): 20 itemInstances
+  L&G (ba:businesstype_lawfirm): 746 itemInstances
+  Logistic&Ray (ba:businesstype_warehouse): 47 itemInstances
+  Gift Dreams (ba:businesstype_giftshop): 88 itemInstances
+  Five Fries (ba:businesstype_fastfoodrestaurant): 100 itemInstances
+  WareHouse Ray (ba:businesstype_warehouse): 48 itemInstances
+  Tech & Gift (ba:businesstype_electronicsstore): 307 itemInstances
+  Innovative Imagery (ba:businesstype_graphicdesigner): 163 itemInstances
+  G&J (ba:businesstype_jewelrystore): 87 itemInstances
+  HQ Ray (ba:businesstype_headquarters): 226 itemInstances
+  Factory (ba:businesstype_factory): 92 itemInstances
+
+Primi item di Rest $ Foods (dettaglio):
+{
+  "$k": "2LxEVtfC6UGxFl2vVW5zhg==",
+  "$v": {
+    "$type": "ItemInstance",
+    "id": "2LxEVtfC6UGxFl2vVW5zhg==",
+    "itemName": "ba:itemname_handtruckspawner",
+    "position": {
+      "$type": "SerializableVector3",
+      "x": 894.6199951171875,
+      "y": 0.0008999999845400453,
+      "z": 7.959442615509033
+    },
+    "yRotation": 0.0,
+    "stackedItems": {
+      "$type": "List`1[[AttachableChild",
+      "$items_count": 0,
+      "$items": []
+    },
+    "parentId": null,
+    "cargoInstances": {
+      "$type": "CargoInstance",
+      "$items_count": 0,
+      "$items": []
+    },
+    "dirtSpotsThatAffects": {
+      "$type": "Int32",
+      "$items_count": 3,
+      "$items": [
+        163,
+        178,
+        164
+      ]
+    },
+    "priceOnPurchase": 0.0,
+    "customPositions": null,
+    "customColors": null,
+    "linkedItemName": null,
+    "isSecured": false,
+    "worldSpaceTextValue": null,
+    "stateIndex": 0,
+    "alias": null
+  }
+}
+{
+  "$k": "cD4F4+kl90iSDFKrhP6ckw==",
+  "$v": {
+    "$type": "ItemInstance",
+    "id": "cD4F4+kl90iSDFKrhP6ckw==",
+    "itemName": "ba:itemname_deliveryspot",
+    "position": {
+      "$type": "SerializableVector3",
+      "x": 893.5,
+      "y": 0.0,
+      "z": 7.5
+    },
+    "yRotation": 0.0,
+    "stackedItems": {
+      "$type": "List`1[[AttachableChild",
+      "$items_count": 0,
+      "$items": []
+    },
+    "parentId": null,
+    "cargoInstances": {
+      "$type": "CargoInstance",
+      "$items_count": 0,
+      "$items": []
+    },
+    "dirtSpotsThatAffects": {
+      "$type": "Int32",
+      "$items_count": 9,
+      "$items": [
+        146,
+        149,
+        163
+      ]
+    },
+    "priceOnPurchase": 0.0,
+    "customPositions": null,
+    "customColors": null,
+    "linkedItemName": null,
+    "isSecured": false,
+    "worldSpaceTextValue": null,
+    "stateIndex": 0,
+    "alias": null
+  }
+}
+{
+  "$k": "5wc4sGJ+FkiQxQTSWmeSWQ==",
+  "$v": {
+    "$type": "ItemInstance",
+    "id": "5wc4sGJ+FkiQxQTSWmeSWQ==",
+    "itemName": "ba:itemname_counter1",
+    "position": {
+      "$type": "SerializableVector3",
+      "x": 894.5,
+      "y": 0.0,
+      "z": 2.0
+    },
+    "yRotation": 1.001791224553017e-05,
+    "stackedItems": {
+      "$type": "List`1[[AttachableChild",
+      "$items_count": 0,
+      "$items": []
+    },
+    "parentId": null,
+    "cargoInstances": {
+      "$type": "CargoInstance",
+      "$items_count": 0,
+      "$items": []
+    },
+    "dirtSpotsThatAffects": {
+      "$type": "Int32",
+      "$items_count": 4,
+      "$items": [
+        73,
+        74,
+        193
+      ]
+    },
+    "priceOnPurchase": 470.0,
+    "customPositions": null,
+    "customColors": {
+      "$type": "CustomColor",
+      "$items_count": 4,
+      "$items": [
+        {
+          "$type": "CustomColor",
+          "channel": 1,
+          "color": "<SerializableColor: 2 keys>"
+        },
+        {
+          "$type": "CustomColor",
+          "channel": 2,
+          "color": "<SerializableColor: 2 keys>"
+        },
+        {
+          "$type": "CustomColor",
+          "channel": 4,
+          "color": "<SerializableColor: 2 keys>"
+        }
+      ]
+    },
+    "linkedItemName": null,
+    "isSecured": false,
+    "worldSpaceTextValue": null,
+    "stateIndex": 0,
+    "alias": null
+  }
+}
+
+==============================================================================
+4. EmployeeInstances — 134 totali
+==============================================================================
+Chiavi: ['$type', '$id', 'id', 'characterData', 'dayHired', 'demands', 'hourlyWage', 'assignedAddress', 'assignedWorkStationItems', 'satisfaction', 'assignedHrManagerPlanId', 'trainingSession', 'nextSickDay', 'isAbsent', 'isReplaced', 'temporalId', 'workedHoursToday', 'workedHoursThisWeek', 'assignedWeeklyDays', 'assignedWeeklyHours', 'hasSendQuitWarning', 'sendRetirementNotice', 'isTrainingDay', 'candidateInfo', 'workedDays', 'initialCombinedSkillAmount', 'poachProposedHourlyWage', 'complaintData', 'isBeingReplaced', 'poached', 'poachedByRivalId', 'lastBonusDay', 'lastWorkedDay', 'lastPoachDay', 'poachDeadlineDays']
+{
+  "$type": "EmployeeInstance",
+  "id": "Yw3tvmqL+EySmqZA+gZszg==",
+  "characterData": {
+    "$type": "CharacterData",
+    "name": "Tracy Stevens",
+    "ageInDays": 1411,
+    "gender": 1,
+    "strength": 0.7400000095367432,
+    "fatness": 0.15000000596046448,
+    "color": {
+      "$type": "Color32",
+      "$vals": [
+        132,
+        75,
+        46,
+        "... (+1 more)"
+      ]
+    },
+    "eyesColor": {
+      "$type": "Color32",
+      "$vals": [
+        0,
+        0,
+        0,
+        "... (+1 more)"
+      ]
+    },
+    "blendshapes": {
+      "$type": "FacialBlendshape",
+      "$items_count": 0,
+      "$items": []
+    },
+    "elements": {
+      "$type": "AppearanceElementData",
+      "$items_count": 9,
+      "$items": [
+        {
+          "$type": "AppearanceElementData",
+          "type": 1,
+          "variantId": "6oBKxdQwcEa4qG9TecIjDA==",
+          "colorId": "VR7Y1sqDU6T59WMSnIzw=="
+        },
+        {
+          "$type": "AppearanceElementData",
+          "type": 2,
+          "variantId": "24llas0Wo0iYmEjy15ljWQ==",
+          "colorId": null
+        },
+        {
+          "$type": "AppearanceElementData",
+          "type": 4,
+          "variantId": "oIpiPytq6UaBqacunsgCHA==",
+          "colorId": null
+        }
+      ]
+    },
+    "skills": {
+      "$type": "Skill",
+      "$items_count": 2,
+      "$items": [
+        {
+          "$type": "Skill",
+          "name": "ba:skill_customerservice",
+          "value": 95.66996002197266
+        },
+        {
+          "$type": "Skill",
+          "name": "ba:skill_cleaning",
+          "value": 40.0
+        }
+      ]
+    },
+    "itemInHands": null
+  },
+  "dayHired": 42,
+  "demands": {
+    "$type": "String",
+    "$items_count": 3,
+    "$items": [
+      "ba:jobdemand_parttime",
+      "ba:jobdemand_peacefulworkenvironment",
+      "ba:jobdemand_cleanworkplace"
+    ]
+  },
+  "hourlyWage": 23.050222396850586,
+  "assignedAddress": {
+    "$type": "Address",
+    "streetName": "ba:street_fifthavenue",
+    "streetNumber": 38
+  },
+  "assignedWorkStationItems": {
+    "$type": "String",
+    "$items_count": 4,
+    "$items": [
+      "ba:itemname_cashregister",
+      "ba:itemname_counter1",
+      "ba:itemname_deskplant02"
+    ]
+  },
+  "satisfaction": 96.39989471435547,
+  "assignedHrManagerPlanId": "m0Q+01soiEyusUeRtIxeiw==",
+  "trainingSession": null,
+  "nextSickDay": 330,
+  "isAbsent": false,
+  "isReplaced": false,
+  "temporalId": 0,
+  "workedHoursToday": 0,
+  "workedHoursThisWeek": 0,
+  "assignedWeeklyDays": {
+    "$type": "DayOfWeekOrdered",
+    "$items_count": 5,
+    "$items": [
+      2,
+      3,
+      5
+    ]
+  },
+  "assignedWeeklyHours": 30,
+  "hasSendQuitWarning": false,
+  "sendRetirementNotice": false,
+  "isTrainingDay": false,
+  "candidateInfo": null,
+  "workedDays": 0,
+  "initialCombinedSkillAmount": 80.0,
+  "poachProposedHourlyWage": 0.0,
+  "complaintData": {
+    "$type": "EmployeeComplaintData",
+    "isComplaining": false,
+    "hoursUntilNextComplaint": 552,
+    "currentComplaint": {
+      "$type": "UnfulfilledDemandsComplaint",
+      "complaintMessageType": "ba:messagetype_employee_contact_complaint_unfulfilled_demands",
+      "hoursToHandleComplaint": 72,
+      "demandName": "ba:jobdemand_peacefulworkenvironment"
+    },
+    "complaintDeadlineHours": 36
+  },
+  "isBeingReplaced": false,
+  "poached": false,
+  "poachedByRivalId": null,
+  "lastBonusDay": 0,
+  "lastWorkedDay": 252,
+  "lastPoachDay": -1,
+  "poachDeadlineDays": 0
+}
+{
+  "$type": "EmployeeInstance",
+  "id": "UANxkF8QRkGBb3hvpqdQzw==",
+  "characterData": {
+    "$type": "CharacterData",
+    "name": "Lori Mitchell",
+    "ageInDays": 3271,
+    "gender": 1,
+    "strength": 0.49000000953674316,
+    "fatness": 0.8999999761581421,
+    "color": {
+      "$type": "Color32",
+      "$vals": [
+        246,
+        179,
+        145,
+        "... (+1 more)"
+      ]
+    },
+    "eyesColor": {
+      "$type": "Color32",
+      "$vals": [
+        0,
+        0,
+        0,
+        "... (+1 more)"
+      ]
+    },
+    "blendshapes": {
+      "$type": "FacialBlendshape",
+      "$items_count": 0,
+      "$items": []
+    },
+    "elements": {
+      "$type": "AppearanceElementData",
+      "$items_count": 9,
+      "$items": [
+        {
+          "$type": "AppearanceElementData",
+          "type": 1,
+          "variantId": "082B+Y0gkEOVFpwF9F3bA==",
+          "colorId": "KVyEj8IsZkmR8eiIXZ31UA=="
+        },
+        {
+          "$type": "AppearanceElementData",
+          "type": 2,
+          "variantId": "24llas0Wo0iYmEjy15ljWQ==",
+          "colorId": null
+        },
+        {
+          "$type": "AppearanceElementData",
+          "type": 4,
+          "variantId": "oIpiPytq6UaBqacunsgCHA==",
+          "colorId": null
+        }
+      ]
+    },
+    "skills": {
+      "$type": "Skill",
+      "$items_count": 2,
+      "$items": [
+        {
+          "$type": "Skill",
+          "name": "ba:skill_customerservice",
+          "value": 97.85554504394531
+        },
+        {
+          "$type": "Skill",
+          "name": "ba:skill_cleaning",
+          "value": 13.0
+        }
+      ]
+    },
+    "itemInHands": null
+  },
+  "dayHired": 42,
+  "demands": {
+    "$type": "String",
+    "$items_count": 3,
+    "$items": [
+      "ba:jobdemand_fulltime",
+      "ba:jobdemand_noevenings",
+      "ba:jobdemand_cleanworkplace"
+    ]
+  },
+  "hourlyWage": 27.665151596069336,
+  "assignedAddress": {
+    "$type": "Address",
+    "streetName": "ba:street_fifthavenue",
+    "streetNumber": 38
+  },
+  "assignedWorkStationItems": {
+    "$type": "String",
+    "$items_count": 3,
+    "$items": [
+      "ba:itemname_cashregister",
+      "ba:itemname_counter1",
+      "ba:itemname_deskplant03"
+    ]
+  },
+  "satisfaction": 99.99980926513672,
+  "assignedHrManagerPlanId": "m0Q+01soiEyusUeRtIxeiw==",
+  "trainingSession": null,
+  "nextSickDay": 342,
+  "isAbsent": false,
+  "isReplaced": false,
+  "temporalId": 0,
+  "workedHoursToday": 0,
+  "workedHoursThisWeek": 0,
+  "assignedWeeklyDays": {
+    "$type": "DayOfWeekOrdered",
+    "$items_count": 6,
+    "$items": [
+      2,
+      3,
+      4
+    ]
+  },
+  "assignedWeeklyHours": 42,
+  "hasSendQuitWarning": false,
+  "sendRetirementNotice": false,
+  "isTrainingDay": false,
+  "candidateInfo": null,
+  "workedDays": 0,
+  "initialCombinedSkillAmount": 91.0,
+  "poachProposedHourlyWage": 0.0,
+  "complaintData": {
+    "$type": "EmployeeComplaintData",
+    "isComplaining": false,
+    "hoursUntilNextComplaint": 708,
+    "currentComplaint": null,
+    "complaintDeadlineHours": 0
+  },
+  "isBeingReplaced": false,
+  "poached": false,
+  "poachedByRivalId": null,
+  "lastBonusDay": 0,
+  "lastWorkedDay": 252,
+  "lastPoachDay": -1,
+  "poachDeadlineDays": 0
+}
+
+==============================================================================
+5. realEstate
+==============================================================================
+{
+  "$type": "RealEstate",
+  "$items_count": 0,
+  "$items": []
+}
+
+==============================================================================
+6. importPartnerships
+==============================================================================
+{
+  "$type": "ImportPartnership",
+  "$items_count": 4,
+  "$items": [
+    {
+      "$type": "ImportPartnership",
+      "id": "soofDw5yokeOk7LYsXBpTg==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "importAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_pier",
+        "streetNumber": 1
+      },
+      "employeeInstanceId": "9W15lUItZ06H5WZTaG4M0g==",
+      "nextDeliveryDay": 260,
+      "products": {
+        "$type": "ImportProduct",
+        "$items_count": 26,
+        "$items": [
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_cheapgift",
+            "amount": 2500,
+            "amountOrderedLastWeek": 0,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": "<Address: 4 keys>"
+          },
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_sodacan",
+            "amount": 0,
+            "amountOrderedLastWeek": 0,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": "<Address: 4 keys>"
+          },
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_paperbag",
+            "amount": 2000,
+            "amountOrderedLastWeek": 0,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": "<Address: 4 keys>"
+          }
+        ]
+      },
+      "isRepeatingOrder": true,
+      "isActive": true,
+      "isUrgentOrder": false,
+      "isTarget": true
+    },
+    {
+      "$type": "ImportPartnership",
+      "id": "ZtShEghBM0CefBJgKhR9XA==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "importAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_pier",
+        "streetNumber": 2
+      },
+      "employeeInstanceId": "GbR7p0Qz0imnKYnhyjmmA==",
+      "nextDeliveryDay": 260,
+      "products": {
+        "$type": "ImportProduct",
+        "$items_count": 27,
+        "$items": [
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_paperbag",
+            "amount": 5000,
+            "amountOrderedLastWeek": 5000,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": "<Address: 4 keys>"
+          },
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_hotdog",
+            "amount": 1000,
+            "amountOrderedLastWeek": 1000,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": "<Address: 4 keys>"
+          },
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_pizza",
+            "amount": 2500,
+            "amountOrderedLastWeek": 2500,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": "<Address: 4 keys>"
+          }
+        ]
+      },
+      "isRepeatingOrder": false,
+      "isActive": false,
+      "isUrgentOrder": false,
+      "isTarget": false
+    },
+    {
+      "$type": "ImportPartnership",
+      "id": "6X31vz2+AU+Wu4aLiqm+hQ==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "importAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_pier",
+        "streetNumber": 3
+      },
+      "employeeInstanceId": "LzhoqpGYyUy4jfN8y8xYlg==",
+      "nextDeliveryDay": 260,
+      "products": {
+        "$type": "ImportProduct",
+        "$items_count": 20,
+        "$items": [
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_cheapflower",
+            "amount": 0,
+            "amountOrderedLastWeek": 0,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": null
+          },
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_expensiveflower",
+            "amount": 0,
+            "amountOrderedLastWeek": 0,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": null
+          },
+          {
+            "$type": "ImportProduct",
+            "itemName": "ba:itemname_bottleofwine",
+            "amount": 0,
+            "amountOrderedLastWeek": 0,
+            "amountOrderedThisWeek": 0,
+            "assignedWarehouse": null
+          }
+        ]
+      },
+      "isRepeatingOrder": false,
+      "isActive": false,
+      "isUrgentOrder": false,
+      "isTarget": false
+    }
+  ]
+}
+
+==============================================================================
+7. itemsOrderedThisWeekByImporter
+==============================================================================
+{
+  "$type": "Dictionary`2[[Address",
+  "comparer": {
+    "$type": "ObjectEqualityComparer`1[[Address"
+  },
+  "$items_count": 0,
+  "$items": []
+}
+
+==============================================================================
+8. logisticsManagerPlans
+==============================================================================
+{
+  "$type": "LogisticsManagerPlan",
+  "$items_count": 3,
+  "$items": [
+    {
+      "$type": "LogisticsManagerPlan",
+      "id": "Rmg31yzUmgC40C0jdVdg==",
+      "isFactory": false,
+      "assignedEmployeeId": "qsK1kEppbkSnh6nwmn2fnQ==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "targetAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_thirdstreet",
+        "streetNumber": 59
+      },
+      "destinations": {
+        "$type": "LogisticsManagerPlanDestination",
+        "$items_count": 6,
+        "$items": [
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          },
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          },
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          }
+        ]
+      }
+    },
+    {
+      "$type": "LogisticsManagerPlan",
+      "id": "7z6DVhfHkk+oNv2AmHguyQ==",
+      "isFactory": false,
+      "assignedEmployeeId": "DzZTr3ng1kWo9zc1mTpZFw==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "targetAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthstreet",
+        "streetNumber": 46
+      },
+      "destinations": {
+        "$type": "LogisticsManagerPlanDestination",
+        "$items_count": 4,
+        "$items": [
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          },
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          },
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          }
+        ]
+      }
+    },
+    {
+      "$type": "LogisticsManagerPlan",
+      "id": "mID1zfTuiUi5uC96nzJPiA==",
+      "isFactory": true,
+      "assignedEmployeeId": "oKijFSIM+0a0ohK3Y1H8g==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "targetAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_seventhavenue",
+        "streetNumber": 6
+      },
+      "destinations": {
+        "$type": "LogisticsManagerPlanDestination",
+        "$items_count": 1,
+        "$items": [
+          {
+            "$type": "LogisticsManagerPlanDestination",
+            "deliveryTargetAddress": "<Address: 4 keys>",
+            "stockTargets": "<ItemAmountTarget: 3 keys>",
+            "isUiCollapsed": false
+          }
+        ]
+      }
+    }
+  ]
+}
+
+==============================================================================
+9. hrManagerPlans
+==============================================================================
+{
+  "$type": "HrManagerPlan",
+  "$items_count": 6,
+  "$items": [
+    {
+      "$type": "HrManagerPlan",
+      "id": "m0Q+01soiEyusUeRtIxeiw==",
+      "assignedEmployeeId": "AuKRsjrwjUasw5V0gGU5Ww==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "assignedEmployees": {
+        "$type": "String",
+        "$items_count": 30,
+        "$items": [
+          "RJeLsDqQ6kuGL+z2O1kAew==",
+          "YbK0Gf94UaXJmoaJmmnA==",
+          "hGWHOCy1Kki871DBaADIEA=="
+        ]
+      },
+      "replaceAbsentEmployees": true,
+      "trainingTarget": 90,
+      "healthInsurancePlan": {
+        "$type": "HealthInsurancePlan",
+        "pricePerDayAndEmployee": 13.800000190734863,
+        "planType": 1
+      }
+    },
+    {
+      "$type": "HrManagerPlan",
+      "id": "yuya5x6zJkmza3u5nLveRA==",
+      "assignedEmployeeId": "JlJyeSlUOEiudiZ5nm0Jcg==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "assignedEmployees": {
+        "$type": "String",
+        "$items_count": 32,
+        "$items": [
+          "1bC5ZQHdO02HwnaxddYBrw==",
+          "hiQkoDt8kCYSaFW93uJVA==",
+          "3an1DDjpEUGZqqaN6I9uA=="
+        ]
+      },
+      "replaceAbsentEmployees": true,
+      "trainingTarget": 86,
+      "healthInsurancePlan": null
+    },
+    {
+      "$type": "HrManagerPlan",
+      "id": "6sRUt0x7TU2DuHyEzal9A==",
+      "assignedEmployeeId": "qgFkW36X3EG2QZVILe7T4g==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "assignedEmployees": {
+        "$type": "String",
+        "$items_count": 24,
+        "$items": [
+          "wivADMxadEGIBDxfjkQWIg==",
+          "bDB0uXHhkaiLa87ODUC4A==",
+          "ouTn10E8vkiVvpPVSsfYmg=="
+        ]
+      },
+      "replaceAbsentEmployees": true,
+      "trainingTarget": 50,
+      "healthInsurancePlan": null
+    }
+  ]
+}
+
+==============================================================================
+10. pricingManagerPlans
+==============================================================================
+{
+  "$type": "PricingManagerPlan",
+  "$items_count": 1,
+  "$items": [
+    {
+      "$type": "PricingManagerPlan",
+      "id": "mINL8lc5xkm24DrTbxlahg==",
+      "assignedEmployeeId": "06DfzUJ1s06h6yCFl5eV0A==",
+      "headquartersAddress": {
+        "$type": "Address",
+        "streetName": "ba:street_fourthavenue",
+        "streetNumber": 53
+      },
+      "supervisedNeighborhood": "ba:neighborhood_garmentdistrict",
+      "originalStorePrices": {
+        "$type": "OriginalStorePrice",
+        "$items_count": 38,
+        "$items": [
+          {
+            "$type": "OriginalStorePrice",
+            "storeAddress": "<Address: 4 keys>",
+            "itemName": "ba:itemname_burger",
+            "hadPrice": true,
+            "price": 12.5,
+            "hadStoredPrice": true,
+            "storedPrice": 12.5
+          },
+          {
+            "$type": "OriginalStorePrice",
+            "storeAddress": "<Address: 4 keys>",
+            "itemName": "ba:itemname_frenchfries",
+            "hadPrice": true,
+            "price": 7.300000190734863,
+            "hadStoredPrice": true,
+            "storedPrice": 7.300000190734863
+          },
+          {
+            "$type": "OriginalStorePrice",
+            "storeAddress": "<Address: 4 keys>",
+            "itemName": "ba:itemname_hotdog",
+            "hadPrice": true,
+            "price": 10.800000190734863,
+            "hadStoredPrice": true,
+            "storedPrice": 10.800000190734863
+          }
+        ]
+      },
+      "appliedPrices": {
+        "$type": "List`1[[RetailPrice",
+        "$items_count": 24,
+        "$items": [
+          {
+            "$type": "RetailPrice",
+            "itemName": "ba:itemname_smartphone1",
+            "price": 1025.9100341796875
+          },
+          {
+            "$type": "RetailPrice",
+            "itemName": "ba:itemname_smartwatch2",
+            "price": 416.010009765625
+          },
+          {
+            "$type": "RetailPrice",
+            "itemName": "ba:itemname_apple",
+            "price": 3.7100000381469727
+          }
+        ]
+      },
+      "manuallyPricedItems": {
+        "$type": "String",
+        "$items_count": 0,
+        "$items": []
+      },
+      "nextUpdateDay": 254,
+      "nextUpdateHour": 8,
+      "cachedSuggestions": {
+        "$type": "PriceSuggestion",
+        "$items_count": 24,
+        "$items": [
+          {
+            "$type": "PriceSuggestion",
+            "itemName": "ba:itemname_burger",
+            "suggestedMin": 16.040000915527344,
+            "suggestedMax": 16.040000915527344,
+            "rivalReferencePrice": 15.86742115020752,
+            "isPlayerSelling": true,
+            "sellingBusinessTypes": "<String: 3 keys>"
+          },
+          {
+            "$type": "PriceSuggestion",
+            "itemName": "ba:itemname_frenchfries",
+            "suggestedMin": 8.020000457763672,
+            "suggestedMax": 8.020000457763672,
+            "rivalReferencePrice": 7.894999980926514,
+            "isPlayerSelling": true,
+            "sellingBusinessTypes": "<String: 3 keys>"
+          },
+          {
+            "$type": "PriceSuggestion",
+            "itemName": "ba:itemname_hotdog",
+            "suggestedMin": 14.949999809265137,
+            "suggestedMax": 14.949999809265137,
+            "rivalReferencePrice": 14.637996673583984,
+            "isPlayerSelling": true,
+            "sellingBusinessTypes": "<String: 3 keys>"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -4,6 +4,8 @@ from pathlib import Path
 from core.data_cleaner import clean_big_ambitions_csv
 from core.hsg_reader import load_save, Save, SaveFormatError
 from core.localization import display_name
+from core.schema_utils import validate_df as _validate_df
+from core.snapshot import Snapshot, build_snapshot
 from collections import defaultdict
 import pandas as pd
 
@@ -64,20 +66,8 @@ HOUR_REPORTS_SCHEMA: dict[str, str] = {
 VALID_SOURCES = {"hsg", "csv"}
 
 
-
-
-def _validate_df(df, name, schema):
-    got = set(df.columns)
-    want = set(schema)
-    if got != want:
-        extra = got - want    
-        missing = want - got
-        raise ValueError(f"{name}: missing {missing}, extra {extra}")
-    
-    for col, want_dtype in schema.items():
-        got_dtype = str(df[col].dtype)
-        if got_dtype != want_dtype:
-            raise ValueError(f"{name}.{col}: expected dtype {want_dtype!r}, got {got_dtype!r}")
+# _validate_df ora vive in core/schema_utils.py (importato sopra con lo
+# stesso nome), perché lo usa anche core/snapshot.py.
 
 
 @dataclass(frozen=True)
@@ -87,7 +77,8 @@ class DataBundle:
     item_sales: Optional[pd.DataFrame] = field(default=None)
     hour_reports: Optional[pd.DataFrame] = field(default=None)
     stock: Optional[pd.DataFrame] = field(default=None)
-    
+    snapshot: Optional[Snapshot] = field(default=None)   # stato attuale, solo HSG
+
     
 
     
@@ -111,7 +102,18 @@ class DataBundle:
         
         if self.hour_reports is not None:
             _validate_df(self.hour_reports, "hour_reports", HOUR_REPORTS_SCHEMA)
-        
+
+        # === snapshot ===
+        # Le 6 tabelle si validano da sole nel Snapshot.__post_init__:
+        # qui controlliamo solo l'invariante csv e il tipo.
+        if self.source == "csv" and self.snapshot is not None:
+            raise ValueError("snapshot must be None when source='csv'")
+
+        if self.snapshot is not None and not isinstance(self.snapshot, Snapshot):
+            raise ValueError(
+                f"snapshot must be a Snapshot, got {type(self.snapshot).__name__}"
+            )
+
         
         
 def load_data(path: Path | str) -> DataBundle:
@@ -277,11 +279,13 @@ def _load_from_hsg(path: Path) -> DataBundle:
     transactions = _hsg_to_transactions(save)
     item_sales = _hsg_to_item_sales(save)
     hour_reports = _hsg_to_hour_reports(save)
-    
+    snapshot = build_snapshot(save)
+
     return DataBundle(
         transactions=transactions,
         source="hsg",
         item_sales=item_sales,
         hour_reports=hour_reports,
+        snapshot=snapshot,
     )
     
