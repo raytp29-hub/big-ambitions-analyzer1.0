@@ -21,6 +21,7 @@ from core.data_loader import load_data
 from visualization.schedule_page import render_schedule_optimizer_page
 from visualization.game_data_page import render_game_data_explorer
 from visualization.health_check_page import render_health_check_page
+from visualization.alerts_view import render_alert_summary
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
@@ -486,7 +487,10 @@ else:
     # Header
     st.title("🎮 Big Ambitions Business Analyzer")
     st.markdown("### Professional analytics for your Big Ambitions empire")
-    
+
+    # Riepilogo alert (solo con save HSG caricato; con CSV non mostra nulla)
+    render_alert_summary(st.session_state.get("bundle"))
+
     st.divider()
     
     # File Upload

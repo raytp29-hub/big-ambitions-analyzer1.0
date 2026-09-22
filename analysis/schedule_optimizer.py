@@ -941,8 +941,13 @@ def optimize_schedule_variable(
     beta: float = 0.5,
     max_shift_len: int = 8,
     customers_per_guard: int = 0,
+    customers_by_hour=None,
+    need_buffer: float = 1.0,
 ) -> OptimizationResult:
     """Solver a TURNI VARIABILI.
+
+    customers_by_hour / need_buffer: clienti reali per (giorno, ora) invece della
+    curva del gioco (vedi compute_hourly_role_demand). None = curva, come prima.
 
     Ogni dipendente/giorno sceglie UNA finestra contigua (durata tra la durata
     del picco clienti e `max_shift_len`). La domanda e' calcolata per ORA dalla
@@ -1016,6 +1021,8 @@ def optimize_schedule_variable(
         max_shift_len=max_shift_len,
         role_capacity=role_capacity,
         customers_per_guard=customers_per_guard,
+        customers_by_hour=customers_by_hour,
+        need_buffer=need_buffer,
     )
 
     prob = pulp.LpProblem("Schedule_Variable", pulp.LpMinimize)

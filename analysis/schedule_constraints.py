@@ -262,6 +262,8 @@ def compute_hourly_role_demand(
     max_shift_len: int = 8,
     role_capacity: Dict[str, int] = None,
     customers_per_guard: int = 0,
+    customers_by_hour: Dict[Tuple[str, int], float] = None,
+    need_buffer: float = 1.0,
 ) -> Tuple[Dict[Tuple[str, str, int], int], Dict[str, dict]]:
     """Fabbisogno di addetti per (ruolo, giorno, ora), LIMITATO ALL'ORGANICO.
 
@@ -283,6 +285,12 @@ def compute_hourly_role_demand(
     capacita' dando priorita' alle ore piu' trafficate. Per il ruolo di vendita
     si protegge prima il floor di 1 ovunque (no buchi), poi si aggiunge l'extra
     sul picco. Cosi' il modello e' SEMPRE risolvibile (best-effort sull'organico).
+
+    Clienti per ora: di default la curva del gioco (capacita' × moltiplicatori).
+    Con `customers_by_hour` {(giorno, ora 0-23): clienti} si usano i clienti
+    REALI (es. hour_reports del save .hsg). `need_buffer` moltiplica i clienti
+    SOLO per il calcolo delle postazioni necessarie (margine: dentro l'ora i
+    clienti non arrivano uniformi); 1.0 = comportamento storico.
 
     Ritorna (demand, info) dove info[ruolo] = {ideal, assigned, cap, uncovered}.
     """
@@ -309,10 +317,13 @@ def compute_hourly_role_demand(
             daymult = daily.get(DAY_NAME_TO_NUM[day], 1.0)
             ph = peak_hours_for_day(business_name, hours)
             for h in hours:
-                cust = effective_capacity * _hourly_multiplier_at(h, hourly) * daymult
+                if customers_by_hour is not None:
+                    cust = customers_by_hour.get((day, h % 24), 0.0)
+                else:
+                    cust = effective_capacity * _hourly_multiplier_at(h, hourly) * daymult
                 flow[(day, h)] = cust
                 if selling:
-                    raw[(day, h)] = min(hc, max(1, _stations_needed(stations, cust)))
+                    raw[(day, h)] = min(hc, max(1, _stations_needed(stations, cust * need_buffer)))
                     # valore economico di UN addetto extra in quest'ora:
                     # clienti che servirebbe (min throughput, flusso) × profitto/cliente
                     econ[(role, day, h)] = ppc * min(throughput, cust) if ppc > 0 else 0.0
@@ -379,6 +390,8 @@ def compute_staffing_recommendation(
     cleaning_per_shift: int = 1,
     security_per_shift: int = 1,
     customers_per_guard: int = 0,
+    customers_by_hour: Dict[Tuple[str, int], float] = None,
+    need_buffer: float = 1.0,
 ) -> Dict[str, dict]:
     """Consiglia l'organico per ruolo SENZA dipendenti, da furniture + orari + dati gioco.
 
@@ -415,9 +428,12 @@ def compute_staffing_recommendation(
             daymult = daily.get(DAY_NAME_TO_NUM[day], 1.0)
             ph = peak_hours_for_day(business_name, hours)
             for h in hours:
-                cust = effective_capacity * _hourly_multiplier_at(h, hourly) * daymult
+                if customers_by_hour is not None:
+                    cust = customers_by_hour.get((day, h % 24), 0.0)
+                else:
+                    cust = effective_capacity * _hourly_multiplier_at(h, hourly) * daymult
                 if selling:
-                    need = max(1, _stations_needed(stations, cust))
+                    need = max(1, _stations_needed(stations, cust * need_buffer))
                 elif stations:
                     need = cleaning_per_shift  # presenza con postazione (cleaning/security)
                 else:

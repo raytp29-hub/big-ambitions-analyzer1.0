@@ -19,7 +19,7 @@ nome, e il giocatore può dare lo stesso nome a due negozi. Formato della
 chiave: "ba:street_fifthavenue|38". Vedi claude/hsg-data-map.md.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -63,8 +63,9 @@ SHIFTS_SCHEMA: dict[str, str] = {          # una riga per turno
     "employee_id":     "string",
     "start_hour":      "int32",
     "end_hour":        "int32",
-    "station_item_id": "string",
-    "shift_type":      "int32",    # 0/1 — significato da confermare
+    "station_item_id":  "string",
+    "station_item_key": "string",   # ba:itemname_* della postazione ("" se non trovata) → ruolo
+    "shift_type":       "int32",    # 1 = cassa/vendita, 0 = cleaning (osservato sul save)
 }
 
 EMPLOYEES_SCHEMA: dict[str, str] = {
@@ -99,6 +100,23 @@ FULFILLED_DEMANDS_SCHEMA: dict[str, str] = {   # una riga per business × domand
     "demand_key": "string",    # ba:customerdemand_*
 }
 
+FURNITURE_SCHEMA: dict[str, str] = {   # una riga per business × tipo di oggetto piazzato
+    "address":  "string",
+    "item_key": "string",      # ba:itemname_* (arredi, macchinari, ma anche decorazioni)
+    "count":    "int32",
+}
+
+EMPLOYEE_SKILLS_SCHEMA: dict[str, str] = {   # una riga per dipendente × skill
+    "employee_id": "string",
+    "skill_key":   "string",    # ba:skill_*
+    "value":       "float64",   # 0-100
+}
+
+EMPLOYEE_DEMANDS_SCHEMA: dict[str, str] = {  # una riga per dipendente × richiesta
+    "employee_id": "string",
+    "demand_key":  "string",    # ba:jobdemand_* (priorità nel game data: job_demands)
+}
+
 # Nome del campo nella dataclass → schema. Usato dal __post_init__ per
 # validare tutte le tabelle con un solo loop.
 SNAPSHOT_SCHEMAS: dict[str, dict[str, str]] = {
@@ -108,7 +126,14 @@ SNAPSHOT_SCHEMAS: dict[str, dict[str, str]] = {
     "employees":         EMPLOYEES_SCHEMA,
     "imports":           IMPORTS_SCHEMA,
     "fulfilled_demands": FULFILLED_DEMANDS_SCHEMA,
+    "furniture":         FURNITURE_SCHEMA,
+    "employee_skills":   EMPLOYEE_SKILLS_SCHEMA,
+    "employee_demands":  EMPLOYEE_DEMANDS_SCHEMA,
 }
+
+
+def _empty(schema: dict[str, str]) -> pd.DataFrame:
+    return pd.DataFrame(columns=list(schema)).astype(schema)
 
 
 # ============================================================================
@@ -123,6 +148,11 @@ class Snapshot:
     employees: pd.DataFrame
     imports: pd.DataFrame
     fulfilled_demands: pd.DataFrame
+    # Default = tabella vuota: gli Snapshot costruiti a mano nei test più
+    # vecchi (senza furniture) restano validi. Campo con default → va in fondo.
+    furniture: pd.DataFrame = field(default_factory=lambda: _empty(FURNITURE_SCHEMA))
+    employee_skills: pd.DataFrame = field(default_factory=lambda: _empty(EMPLOYEE_SKILLS_SCHEMA))
+    employee_demands: pd.DataFrame = field(default_factory=lambda: _empty(EMPLOYEE_DEMANDS_SCHEMA))
 
     def __post_init__(self) -> None:
         # getattr(self, "businesses") == self.businesses: così un solo loop
@@ -170,6 +200,28 @@ def _player_buildings(save: Save) -> list[dict]:
 # ESTRAZIONI — una funzione per tabella
 # ============================================================================
 
+def _item_instances(building: dict, save: Save) -> list[dict]:
+    """
+    Gli oggetti piazzati nel building. itemInstances è un Dictionary C#:
+    ogni voce è {"$k": id, "$v": ItemInstance}, l'oggetto vero sta in "$v"
+    (era il bug di hsg_data_map.py).
+    """
+    items = []
+    for entry in save.items(building.get("itemInstances")):
+        item = save.deref((entry or {}).get("$v"))
+        if item:
+            items.append(item)
+    return items
+
+
+def _item_keys_by_id(building: dict, save: Save) -> dict[str, str]:
+    return {
+        it["id"]: it["itemName"]
+        for it in _item_instances(building, save)
+        if it.get("id") and it.get("itemName")
+    }
+
+
 def _extract_businesses(buildings: list[dict], save: Save) -> pd.DataFrame:
     rows = []
     for b in buildings:
@@ -203,6 +255,9 @@ def _extract_schedule(buildings: list[dict], save: Save) -> tuple[pd.DataFrame, 
     hour_rows, shift_rows = [], []
     for b in buildings:
         address = _key(b.get("StreetName"), b.get("StreetNumber"))
+        # id oggetto → itemName: il turno punta alla postazione per id, il
+        # ruolo (Customer Service, Cleaning...) dipende dal TIPO di postazione.
+        station_keys = _item_keys_by_id(b, save)
         for sd in save.items(b.get("scheduleDays")):
             if not sd:
                 continue
@@ -230,6 +285,7 @@ def _extract_schedule(buildings: list[dict], save: Save) -> tuple[pd.DataFrame, 
                     "start_hour":      _num(sh.get("startingHour")),
                     "end_hour":        _num(sh.get("endingHour")),
                     "station_item_id": sh.get("itemInstanceId") or "",
+                    "station_item_key": station_keys.get(sh.get("itemInstanceId"), ""),
                     "shift_type":      _num(sh.get("type")),
                 })
 
@@ -305,6 +361,47 @@ def _extract_fulfilled_demands(buildings: list[dict], save: Save) -> pd.DataFram
     return _to_df(rows, FULFILLED_DEMANDS_SCHEMA)
 
 
+def _extract_furniture(buildings: list[dict], save: Save) -> pd.DataFrame:
+    """
+    Conta gli oggetti piazzati in ogni business, per tipo.
+    Qui NON filtriamo arredi vs decorazioni: lo decide chi analizza,
+    usando il game data (isFurniture, addedCustomersPerHour...).
+    """
+    rows = []
+    for b in buildings:
+        address = _key(b.get("StreetName"), b.get("StreetNumber"))
+        counts: dict[str, int] = {}
+        for item in _item_instances(b, save):
+            key = item.get("itemName")
+            if key:
+                counts[key] = counts.get(key, 0) + 1
+        rows.extend(
+            {"address": address, "item_key": k, "count": n}
+            for k, n in counts.items()
+        )
+    return _to_df(rows, FURNITURE_SCHEMA)
+
+
+def _extract_employee_details(save: Save) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Skill (characterData.skills) e richieste (demands) di ogni dipendente,
+    in formato lungo: servono allo Schedule Optimizer caricato dal save.
+    """
+    skill_rows, demand_rows = [], []
+    for e in save.items(save.root.get("EmployeeInstances")):
+        if not e or not e.get("id"):
+            continue
+        character = save.deref(e.get("characterData")) or {}
+        for sk in save.items(character.get("skills")):
+            if sk and sk.get("name"):
+                skill_rows.append({"employee_id": e["id"], "skill_key": sk["name"],
+                                   "value": _num(sk.get("value"), 0.0)})
+        for d in save.items(e.get("demands")):
+            if d:
+                demand_rows.append({"employee_id": e["id"], "demand_key": d})
+    return _to_df(skill_rows, EMPLOYEE_SKILLS_SCHEMA), _to_df(demand_rows, EMPLOYEE_DEMANDS_SCHEMA)
+
+
 # ============================================================================
 # ENTRY POINT
 # ============================================================================
@@ -313,6 +410,7 @@ def build_snapshot(save: Save) -> Snapshot:
     """Costruisce lo Snapshot completo. Il __post_init__ valida tutte le tabelle."""
     buildings = _player_buildings(save)
     opening_hours, shifts = _extract_schedule(buildings, save)
+    employee_skills, employee_demands = _extract_employee_details(save)
     return Snapshot(
         businesses=_extract_businesses(buildings, save),
         opening_hours=opening_hours,
@@ -320,4 +418,7 @@ def build_snapshot(save: Save) -> Snapshot:
         employees=_extract_employees(save),
         imports=_extract_imports(save),
         fulfilled_demands=_extract_fulfilled_demands(buildings, save),
+        furniture=_extract_furniture(buildings, save),
+        employee_skills=employee_skills,
+        employee_demands=employee_demands,
     )

@@ -54,12 +54,152 @@ from analysis.schedule_constraints import (
         st.session_state.temp_demands = []"""
 
 # ============================================================================
+# STEP 0: LOAD FROM SAVE (.hsg)
+# ============================================================================
+
+HOURS_WIDGET_KEYS = [f"{prefix}_{day}" for day in DAYS_OF_WEEK for prefix in ("open", "start", "end")]
+
+
+def _loaded_from_save():
+    """Info sul business caricato dal save (None = setup manuale)."""
+    return st.session_state.get("hsg_schedule")
+
+
+def _set_if_valid(key, value, options):
+    """Imposta un widget dello Step 1 solo se il valore è fra le sue opzioni."""
+    if value in options:
+        st.session_state[key] = value
+
+
+def _apply_saved_setup(setup) -> None:
+    """Copia il SavedScheduleSetup negli stessi campi di session_state degli step 1-4."""
+    from analysis.staffing_fit import NEED_BUFFER
+
+    st.session_state.business_setup = setup.building
+    st.session_state.selected_business_type = setup.display_type
+    st.session_state.selected_furniture = setup.selected_furniture
+    st.session_state.total_furniture_cost = setup.total_furniture_cost
+    st.session_state.effective_capacity = setup.effective_capacity
+    st.session_state.max_simultaneous_employees = setup.max_simultaneous
+    st.session_state.employees = list(setup.employees)
+    st.session_state.weekly_schedule = list(setup.weekly_schedule)
+    st.session_state.edit_employee_index = None
+    st.session_state.temp_demands = []
+    st.session_state.pop("optimization_result", None)
+    # il form degli orari legge i widget esistenti: vanno azzerati per ripartire dal save
+    for key in HOURS_WIDGET_KEYS:
+        st.session_state.pop(key, None)
+    # widget dello Step 1 allineati al business caricato (serve anche al check Factory)
+    _set_if_valid("business_category", setup.category, get_available_categories())
+    if setup.category:
+        _set_if_valid("business_type", setup.display_type, get_business_tupes_for_category(setup.category))
+        _set_if_valid("building_code", setup.building.code, get_available_buildings(setup.category))
+    st.session_state.hsg_schedule = {
+        "address": setup.address,
+        "business_name": setup.business_name,
+        "customers_by_hour": setup.customers_by_hour,
+        "customers_source": setup.customers_source,
+        "need_buffer": NEED_BUFFER if setup.customers_by_hour else 1.0,
+        "current_weekly_cost": setup.current_weekly_cost,
+        "current_weekly_hours": setup.current_weekly_hours,
+        "notes": setup.notes,
+    }
+
+
+def _demand_kwargs() -> dict:
+    """Clienti reali per optimizer e staffing suggestion, se caricati dal save."""
+    loaded = _loaded_from_save()
+    if not loaded or not loaded.get("customers_by_hour"):
+        return {}
+    return {"customers_by_hour": loaded["customers_by_hour"], "need_buffer": loaded["need_buffer"]}
+
+
+def render_load_from_save():
+    """Step 0: carica building, mobili, dipendenti e orari di un business dal save."""
+    bundle = st.session_state.get("bundle")
+    if bundle is None or bundle.snapshot is None:
+        st.caption("💡 Load an HSG save from the sidebar to fill Steps 1–4 from one of your businesses.")
+        return
+
+    from analysis.business_alerts import NON_CUSTOMER_TYPES, _street_label
+    from analysis.schedule_from_save import load_schedule_setup
+
+    st.header("📥 Load from your save")
+    biz = bundle.snapshot.businesses
+    biz = biz[~biz["business_type"].isin(NON_CUSTOMER_TYPES)].sort_values("business_name")
+    if biz.empty:
+        st.info("No customer-facing businesses in this save.")
+        return
+    labels = {r.address: f"{r.business_name} — {_street_label(r.address)}" for r in biz.itertuples()}
+
+    c1, c2, c3 = st.columns([3, 1, 1])
+    with c1:
+        address = st.selectbox("Business", options=list(labels), format_func=labels.get,
+                               key="hsg_sched_business")
+    with c2:
+        window = st.select_slider("Customer data (days)", options=[7, 14, 30], value=14,
+                                  key="hsg_sched_window")
+    with c3:
+        use_real = st.checkbox("Real customers", value=True, key="hsg_sched_real",
+                               help="Use the customers per hour from your save's hour reports "
+                                    "instead of the game's demand curve.")
+
+    if st.button("📥 Load into the optimizer", type="primary", use_container_width=True):
+        setup = load_schedule_setup(bundle, address, window_days=window, use_real_customers=use_real)
+        if setup is None:
+            st.error("This business type is not in the game data.")
+        else:
+            _apply_saved_setup(setup)
+            st.rerun()
+
+    loaded = _loaded_from_save()
+    if loaded:
+        src = ("real customers from hour reports" if loaded["customers_source"] == "observed"
+               else "the game's demand curve")
+        st.success(f"Loaded **{loaded['business_name']}** — Steps 1–4 are filled from your save "
+                   f"(you can still edit employees and hours). Demand: {src}.")
+        for note in loaded.get("notes", []):
+            st.warning(note)
+
+
+# ============================================================================
 # STEP 1: BUSINESS SETUP
 # ============================================================================
+
+def _render_loaded_business_setup(loaded) -> None:
+    """Step 1 in sola lettura quando il setup arriva dal save."""
+    setup = st.session_state.business_setup
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Business", st.session_state.get("selected_business_type", ""))
+    c2.metric("Building", f"{setup.code} ({setup.business_type})")
+    c3.metric("Effective capacity", f"{st.session_state.effective_capacity}/h")
+    c4.metric("Workstations", st.session_state.max_simultaneous_employees)
+    rows = [{"Furniture": f["name"], "Qty": f["quantity"], "Cust. cap.": f["unit_capacity"],
+             "Workstation": "✓" if f["is_workstation"] else "",
+             "Role": ", ".join(f["suitable_skills"])}
+            for f in st.session_state.selected_furniture]
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.caption("From your save: workstations and furniture that bring customers (decor is left out).")
+    if st.button("✏️ Set up manually instead", key="hsg_manual_setup"):
+        st.session_state.pop("hsg_schedule", None)
+        st.session_state.business_setup = None
+        st.session_state.selected_furniture = []
+        st.session_state.employees = []
+        st.session_state.weekly_schedule = []
+        st.session_state.pop("optimization_result", None)
+        for key in HOURS_WIDGET_KEYS:
+            st.session_state.pop(key, None)
+        st.rerun()
+
 
 def render_business_setup():
     """Step 1: Business setup with furniture selection"""
     st.header("📍 Step 1: Business Setup")
+
+    loaded = _loaded_from_save()
+    if loaded and st.session_state.get("business_setup"):
+        _render_loaded_business_setup(loaded)
+        return
     
     # ================================================================
     # SECTION 1: Business Category Selection
@@ -696,11 +836,13 @@ def render_staffing_suggestion():
     }
     biz = getattr(setup, 'business_name', '') or st.session_state.get('selected_business_type', '')
     cap = getattr(setup, 'capacity_limit', 0)
-    recs = compute_staffing_recommendation(biz, cap, open_hours, role_ws)
+    recs = compute_staffing_recommendation(biz, cap, open_hours, role_ws, **_demand_kwargs())
 
+    demand_src = ("your real customers per hour (from the save)" if _demand_kwargs()
+                  else "the game's demand curve")
     st.caption(
-        "Suggested hiring based on your furniture, opening hours and the game's demand "
-        "curve — no employees needed yet. 'Why' shows the drivers behind each number."
+        f"Suggested hiring based on your furniture, opening hours and {demand_src} "
+        "— no employees needed yet. 'Why' shows the drivers behind each number."
     )
     any_shown = False
     for role, r in sorted(recs.items()):
@@ -783,6 +925,7 @@ def render_optimization():
                     selected_furniture=st.session_state.selected_furniture,
                     alpha=alpha,
                     beta=beta,
+                    **_demand_kwargs(),
                 )
                 st.session_state.optimization_result = result
             except Exception as e:
@@ -857,7 +1000,19 @@ def render_optimization():
             # --- Comparison with the actual business wage (baseline = weekly average) ---
             st.markdown("**Comparison with the current business**")
             df_tx = st.session_state.get('df')
-            if df_tx is None:
+            loaded = _loaded_from_save()
+            if loaded:
+                # dal save: il costo dei turni attuali, stessa base dell'optimizer (ore × salario)
+                current = loaded["current_weekly_cost"]
+                delta = result.total_cost - current
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Current schedule (save)", f"${current:,.0f}/week",
+                          help=f"{loaded['current_weekly_hours']} staff-hours/week in your save")
+                c2.metric("Optimized", f"${result.total_cost:,.0f}/week")
+                c3.metric("Δ optimized − current", f"${delta:,.0f}",
+                          delta=f"{delta:,.0f}", delta_color="inverse")
+                st.caption("Both are hours × hourly wage (no insurance/HR), so they compare like for like.")
+            elif df_tx is None:
                 st.caption("💡 Import transactions on the main page to compare the planned "
                            "cost with the business's actual wage.")
             else:
@@ -975,7 +1130,11 @@ def render_schedule_optimizer_page():
     st.markdown("Configure your business and employees for optimal scheduling")
     
     st.divider()
-    
+
+    # Step 0: carica un business dal save .hsg (opzionale)
+    render_load_from_save()
+    st.divider()
+
     # Render all steps
     render_business_setup()
     st.divider()
