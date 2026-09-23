@@ -98,7 +98,7 @@ def build_context(snapshot: Snapshot) -> AlertContext:
     from core.game_data import get_all_business_types   # import qui: carica il JSON
 
     names = {
-        row.address: (row.business_name or "Empty building")
+        row.address: (row.business_name or _street_label(row.address))   # vuoto → "13 Broadway"
         for row in snapshot.businesses.itertuples()
     }
     requirements = {}
@@ -206,7 +206,7 @@ def check_rent_waste(bundle: DataBundle, ctx: AlertContext) -> list[Alert]:
     """6. Affitto pagato per un building vuoto o per un business chiuso."""
     alerts = []
     for b in bundle.snapshot.businesses.itertuples():
-        name = ctx.names.get(b.address, b.business_name or "Empty building")
+        name = ctx.names.get(b.address) or b.business_name or _street_label(b.address)
         if b.business_type == "ba:businesstype_empty":
             alerts.append(Alert(
                 b.address, name, "critical", "RENT_ON_EMPTY",

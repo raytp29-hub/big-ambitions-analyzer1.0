@@ -5,6 +5,8 @@ per la pagina Business Health Check. La logica sta in analysis/business_alerts.p
 qui c'è solo la presentazione.
 """
 
+from typing import Callable, Optional
+
 import pandas as pd
 import streamlit as st
 
@@ -12,7 +14,35 @@ from analysis.business_alerts import (
     SEVERITY_ORDER, build_context, demand_status, run_all_checks, summarize,
 )
 
+from visualization.ui_components import render_severity_card
+
 SEVERITY_ICON = {"critical": "🔴", "warning": "🟠", "info": "🔵"}
+
+# Etichette brevi per le card della Home (il messaggio lungo resta nel dettaglio).
+# Chiave = Alert.code, stabile; un codice nuovo senza etichetta usa il messaggio.
+ALERT_LABEL = {
+    "RENT_ON_EMPTY":       "Empty building",
+    "RENT_WHILE_CLOSED":   "Closed, still paying rent",
+    "NO_EMPLOYEE_NOW":     "Nobody working now",
+    "UNCOVERED_HOURS":     "Hours without staff",
+    "LOSING_MONEY":        "Losing money",
+    "REVENUE_DOWN":        "Revenue down",
+    "REVENUE_UP":          "Revenue up",
+    "LOW_SATISFACTION":    "Low satisfaction",
+    "MISSING_DEMANDS":     "Missing customer demands",
+    "PROMOTION_BELOW_CAP": "Promotion below cap",
+    "AT_CAPACITY":         "At customer capacity",
+    "IMPORT_PAUSED":       "Import paused",
+    "QUIT_WARNING":        "Employee about to quit",
+    "EMPLOYEE_COMPLAINT":  "Employee complaining",
+    "NO_HEALTH_INSURANCE": "No health insurance",
+    "OVERSTAFFED_HOURS":   "Overstaffed hours",
+}
+CARD_ITEMS = 3   # voci mostrate per card; le altre finiscono in "+N more"
+
+
+def short_label(alert) -> str:
+    return ALERT_LABEL.get(alert.code, alert.message)
 
 
 def _get_alerts(bundle):
@@ -20,8 +50,10 @@ def _get_alerts(bundle):
     return run_all_checks(bundle)
 
 
-def render_alert_summary(bundle) -> None:
-    """Riepilogo in cima al Dashboard: conteggi per gravità + i critici principali."""
+def render_alert_summary(bundle, on_open: Optional[Callable[[], None]] = None) -> None:
+    """Home: una card per gravità (Critical / Warning / Info) con le prime voci.
+    `on_open` = callback del bottone che porta alla Health Check (la navigazione
+    sta in app.py: qui non serve sapere come è fatta)."""
     if bundle is None or bundle.snapshot is None:
         return
 
@@ -29,22 +61,19 @@ def render_alert_summary(bundle) -> None:
     counts = summarize(alerts)
 
     st.subheader("Business Alerts")
-    c1, c2, c3 = st.columns(3)
-    c1.metric(f"{SEVERITY_ICON['critical']} Critical", counts["critical"])
-    c2.metric(f"{SEVERITY_ICON['warning']} Warnings", counts["warning"])
-    c3.metric(f"{SEVERITY_ICON['info']} Info", counts["info"])
+    columns = st.columns(len(SEVERITY_ORDER))
+    for col, severity in zip(columns, SEVERITY_ORDER):
+        items = [(short_label(a), a.business) for a in alerts if a.severity == severity]
+        with col:
+            render_severity_card(severity, counts[severity], items[:CARD_ITEMS])
 
-    critical = [a for a in alerts if a.severity == "critical"]
-    for a in critical[:3]:
-        st.error(f"**{a.business}** — {a.message} ({a.evidence})")
-    if len(critical) > 3:
-        st.caption(f"+{len(critical) - 3} more critical issues.")
-    st.caption("Full details in the 🏥 Business Health Check page.")
+    if on_open is not None:
+        st.button("Open Business Health Check →", on_click=on_open, key="home_open_health")
 
 
 def render_alerts_section(bundle) -> None:
     """Sezione completa: alert raggruppati per business + griglia delle customer demands."""
-    st.header("Your Businesses — Live Status")
+    st.header("Your Businesses")
 
     if bundle is None or bundle.snapshot is None:
         st.info(

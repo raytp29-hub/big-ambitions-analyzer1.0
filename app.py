@@ -22,6 +22,7 @@ from visualization.schedule_page import render_schedule_optimizer_page
 from visualization.game_data_page import render_game_data_explorer
 from visualization.health_check_page import render_health_check_page
 from visualization.alerts_view import render_alert_summary
+from visualization.ui_components import inject_css
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
@@ -41,6 +42,17 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+inject_css()   # stile dei componenti condivisi (card, tabelle, badge), una volta per run
+
+PAGES = ["📊 Main Dashboard", "🗓️ Schedule Optimizer", "📈 Forecasting",
+         "🎮 Game Data Explorer", "🏥 Business Health Check"]
+HEALTH_CHECK_PAGE = "🏥 Business Health Check"
+
+
+def _go_to_health_check() -> None:
+    # Callback di un bottone: gira PRIMA che la selectbox venga ridisegnata,
+    # quindi può cambiarne il valore tramite la sua key.
+    st.session_state.nav = HEALTH_CHECK_PAGE
 
 # ============================================================================
 # SIDEBAR - NAVIGATION
@@ -53,8 +65,9 @@ with st.sidebar:
     # PAGE SELECTOR
     page = st.selectbox(
         "📍 Navigation",
-        ["📊 Main Dashboard", "🗓️ Schedule Optimizer", "📈 Forecasting", "🎮 Game Data Explorer", "🏥 Business Health Check"],
-        help="Choose which tool to use"
+        PAGES,
+        help="Choose which tool to use",
+        key="nav",
     )
     
 
@@ -78,13 +91,20 @@ with st.sidebar:
         key="main_uploader"
     )
 
-    with st.expander("ℹ️ Where do I find my save file?"):
-        st.markdown(
-            "**Windows**: `%USERPROFILE%\AppData\LocalLow\Hovgaard Games\Big Ambitions\SaveGames\Big Ambitions`\n\n"
-            "The file looks like (`gI7Ndw0UqE+x4dDT1gqOiQ==`). "
-            "Inside you'll find your `.hsg` files.\n\n"
-            "**Tip**: file names match the save game name you set in-game."
-        )
+    with st.expander("ℹ️ Where do I find my save file (.hsg)?"):
+        st.markdown(r"""
+1. Press **Win + R**, paste this and press Enter:
+   `%USERPROFILE%\AppData\LocalLow\Hovgaard Games\Big Ambitions\SaveGames`
+2. Open the folder of your game version: **`Big Ambitions`** for 1.0
+   (older builds: `EA 0.10`, `EA 0.11`).
+3. Open the folder with the random name (e.g. `gI7Ndw0UqE+x4dDT1gqOiQ==`).
+4. Upload the most recent `.hsg` file. You'll find:
+   - your save, named as in the game (e.g. `My Empire.hsg`);
+   - the game's automatic saves: `Recover #0.hsg`, `Recover #1.hsg`,
+     `Recover #2.hsg`, `Recover Midnight.hsg`.
+
+The `.hsg` file is only read, never changed.
+""")
 
     if uploaded_file is not None:
         # Bridge Streamlit bytes → filesystem path for load_data
@@ -487,13 +507,16 @@ else:
     # Header
     st.title("🎮 Big Ambitions Business Analyzer")
     st.markdown("### Professional analytics for your Big Ambitions empire")
+    st.markdown(
+        "Load your **.hsg save** from the sidebar and the analyzer checks every business you own. "
+        "Problems are grouped by urgency: **Critical** is costing you money right now, "
+        "**Warning** hurts revenue or staff over time, **Info** is worth a look. "
+        "Open the Business Health Check for the details of each business."
+    )
 
     # Riepilogo alert (solo con save HSG caricato; con CSV non mostra nulla)
-    render_alert_summary(st.session_state.get("bundle"))
+    render_alert_summary(st.session_state.get("bundle"), on_open=_go_to_health_check)
 
-    st.divider()
-    
-    # File Upload
     st.divider()
     
     if st.session_state.df is None:
