@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 
 
 from analysis.health_check import (
-    NEIGHBOURHOOD_NAMES, compute_bep, compute_performance,
+    NEIGHBOURHOOD_NAMES, compute_bep, compute_performance, demand_matrix,
     generate_report, rank_products, rank_zone, compute_recommended_hours
 )
 
@@ -69,25 +69,9 @@ def render_health_check_page():
 # HELPER CONDIVISI
 # ============================================================================
 
-def _demand_matrix(internal_name: str) -> np.ndarray:
-    """Domanda 7×24 (giorno × ora) dal game data: moltiplicatore giorno × ora."""
-    demand = get_demand_multipliers(internal_name)
-    hourly_24 = [0.0] * 24
-    for h in demand['hourly']:
-        for hour in range(h['start'], min(h['end'], 24)):
-            hourly_24[hour] = h['multiplier']
-
-    matrix = np.zeros((7, 24))
-    for d in demand['daily']:
-        day_idx = d['day'] - 1
-        for hour in range(24):
-            matrix[day_idx][hour] = round(d['multiplier'] * hourly_24[hour], 3)
-    return matrix
-
-
 def _demand_heatmap(internal_name: str, title: str, open_hours: dict | None = None) -> go.Figure:
     """Heatmap della domanda; con open_hours oscura le ore in cui sei chiuso."""
-    matrix = _demand_matrix(internal_name)
+    matrix = demand_matrix(internal_name)
     x = [f"{h:02d}:00" for h in range(24)]
     fig = px.imshow(matrix, x=x, y=DAY_ORDER, color_continuous_scale='YlOrRd', title=title)
     fig.update_layout(coloraxis_colorbar=dict(title="Demand"))
@@ -381,7 +365,7 @@ def _render_planner(bundle) -> None:
     result = compute_bep(internal_name, building_cap, zone_traffic, daily_rent)
 
     if result is None:
-        st.error("This business is not profitable with these parameters.")
+        st.error("The game's demand curve for this business type never reaches the model threshold: no theoretical opening hours.")
     else:
         col1, col2, col3, col4 = st.columns(4)
 
@@ -409,7 +393,8 @@ def _render_planner(bundle) -> None:
         with col6:
             st.metric("Employees Needed", result.employees)
         with col7:
-            st.metric("Break Even", f"{result.break_even:.0f} days")
+            st.metric("Break Even", f"{result.break_even:.0f} days" if result.profit > 0 else "never",
+                      help="Days to recover the setup cost. 'never' = the model makes a daily loss.")
 
         st.caption("Estimated daily figures based on optimal furniture, location traffic, and demand curve. Break Even = days to recover the setup cost.")
 

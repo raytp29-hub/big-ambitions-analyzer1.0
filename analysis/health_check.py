@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import List
 from collections import defaultdict
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -154,7 +155,40 @@ def compute_recommended_hours(biz_name: str, threshold: float = 0.3) -> tuple[in
         return 8, 22
     return min(good_hours), max(good_hours) + 1
 
-    
+
+def demand_matrix(biz_name: str) -> np.ndarray:
+    """Domanda 7×24 (giorno × ora) dal game data: moltiplicatore giorno × ora.
+    Riga 0 = lunedì. Tutto a zero se il tipo di business non esiste."""
+    demand = get_demand_multipliers(biz_name)
+    matrix = np.zeros((7, 24))
+    if demand is None:
+        return matrix
+
+    hourly_24 = [0.0] * 24
+    for h in demand['hourly']:
+        for hour in range(h['start'], min(h['end'], 24)):
+            hourly_24[hour] = h['multiplier']
+
+    for d in demand['daily']:
+        day_idx = d['day'] - 1
+        for hour in range(24):
+            matrix[day_idx][hour] = round(d['multiplier'] * hourly_24[hour], 3)
+    return matrix
+
+
+def model_open_hours(matrix: np.ndarray, threshold: float = 0.3) -> dict[int, set[int]]:
+    """Ore del modello, giorno per giorno: dalla prima all'ultima ora con
+    domanda >= threshold (i buchi in mezzo si riempiono). Giorni 1-7 (1 = lunedì),
+    stesso formato di business_fit.open_hours_by_day. I giorni senza ore mancano."""
+    result = {}
+    for day_idx, row in enumerate(matrix):
+        hours = np.where(row >= threshold)[0]
+        if hours.size == 0:
+            continue
+        result[day_idx + 1] = set(range(int(hours.min()), int(hours.max()) + 1))
+    return result
+
+
 @dataclass
 class MiniFurniture:
     name: str
@@ -174,8 +208,21 @@ class BepResult:
     profit: float
     break_even: float
     daily_customers: float
-    open_hour: int
-    close_hour: int
+    open_hours: dict              # giorno (1-7) → set di ore, da model_open_hours
+
+    @property
+    def weekly_hours(self) -> int:
+        return sum(len(h) for h in self.open_hours.values())
+
+    @property
+    def open_hour(self) -> int:
+        """Prima ora di apertura della settimana (per le etichette 'HH:00-HH:00')."""
+        return min(min(h) for h in self.open_hours.values())
+
+    @property
+    def close_hour(self) -> int:
+        """Ora di chiusura più tarda della settimana (esclusa)."""
+        return max(max(h) for h in self.open_hours.values()) + 1
     
     
 @st.cache_data(show_spinner=False)
@@ -269,64 +316,33 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
         
         
         
-    demand = get_demand_multipliers(biz_name)
-    hourly = demand["hourly"]
-    daily = demand["daily"]
-    
-    
+    # Ore del modello: dalla stessa matrice della heatmap, giorno per giorno
+    # (prima: ore "profittevoli" su un giorno medio → 00-24 con prodotti cari).
+    matrix = demand_matrix(biz_name)
+    open_hours = model_open_hours(matrix)
+    if not open_hours:
+        return None
+
     furniture_cap = sum(f.capacity * f.quantity for f in furniture_list)
     effective_cap = min(furniture_cap, building_cap)
-    
 
     rev_per_customer = sum(p.market_price * p.probability for p in core_products)
     cost_per_customer = sum(p.wholesale_price * p.probability for p in core_products)
-    profit_per_customer = rev_per_customer - cost_per_customer
-    hourly_wage_cost = n_employees * hourly_wage
-    
-    
-    
-    
-    total_weekly_customers = 0
-    total_profitable_hours = 0
-    
-    # 1. Orari ottimali (basati su media giornaliera)
-    avg_daily_mult = sum(d['multiplier'] for d in daily) / len(daily)
-    profitable_hours = set()
 
-    for h in hourly:
-        for hour in range(h['start'], h['end']):
-            customers = min(traffic * h['multiplier'] * avg_daily_mult, effective_cap)
-            hour_profit = (customers * profit_per_customer) - hourly_wage_cost
-            if hour_profit > 0:
-                profitable_hours.add(hour)
+    # Clienti per ora = traffico × domanda della cella, tagliati dalla capacità
+    weekly_customers = sum(
+        min(traffic * matrix[day - 1][hour], effective_cap)
+        for day, hours in open_hours.items()
+        for hour in hours
+    )
+    weekly_hours = sum(len(hours) for hours in open_hours.values())
 
-    open_hour = min(profitable_hours) if profitable_hours else 8
-    close_hour = max(profitable_hours) + 1 if profitable_hours else 22
-
-
-
-    for d in daily:
-        for hour in range(open_hour, close_hour):
-            h_mult = next((h['multiplier'] for h in hourly if h['start'] <= hour < h['end']), 0)
-            customers = min(traffic * h_mult * d['multiplier'], effective_cap)
-            total_weekly_customers += customers
-            total_profitable_hours += 1       
-            
-    open_days = sum(1 for d in daily if any(
-        min(traffic * h["multiplier"] * d["multiplier"], effective_cap) * profit_per_customer - hourly_wage_cost > 0 for h in hourly
-    ))
-    
-    
-    
-    
-    
-    if open_days == 0:
-        return None
-    
-    daily_customers = total_weekly_customers / open_days
+    # Tutto per giorno di CALENDARIO (/7), come l'Actual del save:
+    # l'affitto si paga anche nei giorni chiusi.
+    daily_customers = weekly_customers / 7
     daily_revenue = daily_customers * rev_per_customer
     daily_wholesale = daily_customers * cost_per_customer
-    daily_wages = (total_profitable_hours / open_days) * hourly_wage * n_employees
+    daily_wages = weekly_hours * hourly_wage * n_employees / 7
     daily_costs = daily_rent + daily_wages + daily_wholesale
     daily_profit = daily_revenue - daily_costs
     setup_cost = sum(f.price * f.quantity for f in furniture_list)
@@ -342,8 +358,7 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
         costs= daily_costs,
         profit= daily_profit,
         break_even= break_even,
-        open_hour= open_hour,
-        close_hour= close_hour
+        open_hours= open_hours,
     )
     
     
@@ -393,7 +408,7 @@ def compute_performance(df, business_name:str, bep: BepResult, hourly_wage: floa
     
     n_days = len(daily_data)
     theo_revenue = bep.revenue
-    theo_wages = bep.employees * hourly_wage * (bep.close_hour - bep.open_hour)
+    theo_wages = bep.employees * hourly_wage * bep.weekly_hours / 7
     
     avg_daily_revenue = actual_revenue / n_days
     avg_daily_wages = actual_wages / n_days

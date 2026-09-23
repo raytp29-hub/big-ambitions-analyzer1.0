@@ -325,15 +325,14 @@ def compare_to_theory(
     bep,                                   # health_check.BepResult (o None)
     actual: ActualMetrics,
     core_products: Optional[list] = None,  # [(item_key, label)] prodotti chiave del tipo
-    recommended_hours: Optional[tuple[int, int]] = None,   # (open, close) dalla curva di domanda
     name_to_key: Optional[dict[str, str]] = None,
     mandatory: frozenset = frozenset(),    # nomi degli arredi "obbligatori" del modello
     staffing=None,                         # staffing_fit.StaffingResult (personale ora per ora)
 ) -> list[FitRow]:
     if bep is None:
         return [FitRow(
-            "Model", "not profitable", "-", "info",
-            "compute_bep finds no profitable hour with this traffic/rent: "
+            "Model", "no demand hours", "-", "info",
+            "the game's demand curve never reaches the model threshold for this type: "
             "the theoretical model does not apply.",
         )]
 
@@ -354,25 +353,23 @@ def compare_to_theory(
         f"capacity {profile.capacity}/h · traffic index {profile.traffic}",
     ))
 
-    # 3. Orari: quante delle ore consigliate sei aperto.
-    # Si usa la curva di domanda (compute_recommended_hours), non gli orari di
-    # compute_bep: con un trafficIndex alto il modello trova "profittevole"
-    # anche la notte e consiglia 00-24.
-    rec_open, rec_close = recommended_hours or (bep.open_hour, bep.close_hour)
-    recommended = set(range(rec_open, rec_close))
-    if actual.open_hours and recommended:
-        covered = sum(len(recommended & hrs) for hrs in actual.open_hours.values())
-        wanted = len(recommended) * len(actual.open_hours)
-        extra = sum(len(hrs - recommended) for hrs in actual.open_hours.values())
+    # 3. Orari: le ore del modello (heatmap della domanda, giorno per giorno,
+    # vedi health_check.model_open_hours) confrontate con le tue, giorno per giorno.
+    theory_hours = bep.open_hours
+    wanted = sum(len(h) for h in theory_hours.values())
+    theory_label = f"{len(theory_hours)} days · {wanted} h/week"
+    if actual.open_hours and wanted:
+        covered = sum(len(h & actual.open_hours.get(day, set())) for day, h in theory_hours.items())
+        extra = sum(len(h - theory_hours.get(day, set())) for day, h in actual.open_hours.items())
         pct = covered / wanted
         status = "ok" if pct >= OK_RATIO else "warn" if pct >= WARN_RATIO else "bad"
-        note = f"{pct:.0%} of peak-demand hours covered"
+        note = f"{pct:.0%} of the model's demand hours covered"
         if extra:
             note += f" · {extra} h/week open outside them"
         actual_label = f"{len(actual.open_hours)} days · {sum(len(h) for h in actual.open_hours.values())} h/week"
     else:
         status, note, actual_label = "bad", "no opening hours set", "closed"
-    rows.append(FitRow("Opening hours", _hours_label(rec_open, rec_close), actual_label, status, note))
+    rows.append(FitRow("Opening hours", theory_label, actual_label, status, note))
 
     # 4. Personale.
     # Con lo staffing ora per ora (staffing_fit): una riga per ruolo, teorico
@@ -401,17 +398,20 @@ def compare_to_theory(
         ))
 
     # 5. Salari in % del ricavo (soglie assolute, vedi WAGE_SHARE_*).
+    # Tutto per giorno di CALENDARIO: revenue_per_day conta anche i giorni chiusi,
+    # quindi i salari della settimana vanno divisi per 7, non per i giorni aperti.
     # Teorico: con lo staffing = salari delle ore NECESSARIE sul TUO ricavo
     # (cioè quanto peserebbero i salari con l'organico giusto).
     open_days = len(actual.open_hours) or 1
+    wages_per_day = actual.wages_per_open_day * open_days / 7
     if staffing is not None and staffing.roles and actual.revenue_per_day:
         needed_hours = sum(r.hours_needed for r in staffing.roles)
-        theo_share = needed_hours * actual.avg_hourly_wage / open_days / actual.revenue_per_day
+        theo_share = needed_hours * actual.avg_hourly_wage / 7 / actual.revenue_per_day
     else:
-        theo_wages = bep.employees * actual.avg_hourly_wage * (bep.close_hour - bep.open_hour)
+        theo_wages = bep.employees * actual.avg_hourly_wage * bep.weekly_hours / 7
         theo_share = theo_wages / bep.revenue if bep.revenue > 0 else None
     if actual.revenue_per_day:
-        share = actual.wages_per_open_day / actual.revenue_per_day
+        share = wages_per_day / actual.revenue_per_day
         share_label = f"{share:.0%}"
         share_status = "ok" if share <= WAGE_SHARE_OK else "warn" if share <= WAGE_SHARE_WARN else "bad"
     else:
@@ -486,7 +486,7 @@ def evaluate_business(bundle: DataBundle, address: str, window_days: int = WINDO
     `staffing` si può passare già calcolato (la pagina lo mostra anche a parte)."""
     from analysis.staffing_fit import evaluate_staffing
     from analysis.health_check import (
-        MANDATORY_FURNITURE, compute_bep, compute_recommended_hours,
+        MANDATORY_FURNITURE, compute_bep,
     )
 
     profile = resolve_business_profile(bundle.snapshot, address)
@@ -501,7 +501,6 @@ def evaluate_business(bundle: DataBundle, address: str, window_days: int = WINDO
         profile, bep, actual,
         staffing=staffing,
         core_products=core_products_for(profile.biz_name),
-        recommended_hours=compute_recommended_hours(profile.biz_name),
         name_to_key=furniture_name_index(),
         mandatory=frozenset(mf["name"] for mf in MANDATORY_FURNITURE),
     )
