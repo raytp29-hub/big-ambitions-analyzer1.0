@@ -13,6 +13,7 @@ from analysis.health_check import (
 
 from analysis.schedule_constraints import get_available_buildings, get_available_categories, get_building_capacity, get_business_tupes_for_category
 from core.game_data import get_demand_multipliers, business_type_display_by_name
+from telemetry.events import log_event
 from analysis.revenue_analyzer import extract_business_from_revenue
 from analysis.business_alerts import (
     NON_CUSTOMER_TYPES, SAT_WARNING, _street_label, build_context, demand_status,
@@ -570,6 +571,15 @@ ROLE_DETAIL_COLUMNS = [
 ]
 
 
+def _business_type(bundle, address):
+    """Tipo di business (es. ba:businesstype_lawfirm) per la telemetria; None se manca."""
+    try:
+        biz = bundle.snapshot.businesses
+        return str(biz.loc[biz["address"] == address, "business_type"].iloc[0])
+    except Exception:
+        return None
+
+
 def _render_staffing(bundle, address, staffing, window: int) -> None:
     st.subheader("Staffing — your schedule vs optimized")
     render_note(HOW_TO_READ_STAFFING.format(window=window))
@@ -580,6 +590,8 @@ def _render_staffing(bundle, address, staffing, window: int) -> None:
         entry = None                                   # save ricaricato: risultato vecchio
     label = "Optimize this schedule" if entry is None else "Optimize again"
     if st.button(label, type="primary", key=f"hc_opt_btn_{address}"):
+        log_event("optimize_clicked", page="health_check",
+                  business_type=_business_type(bundle, address))
         with st.spinner("Running the Schedule Optimizer…"):
             try:
                 setup, current, result = _run_optimizer(bundle, address, window)

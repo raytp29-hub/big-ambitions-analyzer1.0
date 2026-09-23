@@ -12,3 +12,6 @@ scipy>=1.11.0
 
 # Excel/CSV Support
 openpyxl>=3.1.0
+
+# Usage analytics (only used when ANALYTICS_DSN is set)
+psycopg[binary]>=3.1

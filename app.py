@@ -30,6 +30,10 @@ from visualization.home_sections import (
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
+from telemetry.events import (
+    enabled as telemetry_enabled, log_event, log_once, log_page_view, start_session,
+)
+from telemetry.feedback import render_feedback
 from pathlib import Path
 
 
@@ -47,16 +51,36 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 inject_css()   # stile dei componenti condivisi (card, tabelle, badge), una volta per run
+start_session()   # telemetria anonima: session_start solo alla prima run della sessione
 
 PAGES = ["📊 Main Dashboard", "🗓️ Schedule Optimizer", "📈 Forecasting",
          "🎮 Game Data Explorer", "🏥 Business Health Check"]
 HEALTH_CHECK_PAGE = "🏥 Business Health Check"
+# chiavi stabili per la telemetria (niente emoji nel database)
+PAGE_KEYS = {
+    "📊 Main Dashboard": "home",
+    "🗓️ Schedule Optimizer": "schedule_optimizer",
+    "📈 Forecasting": "forecasting",
+    "🎮 Game Data Explorer": "game_data",
+    HEALTH_CHECK_PAGE: "health_check",
+}
 
 
 def _go_to_health_check() -> None:
     # Callback di un bottone: gira PRIMA che la selectbox venga ridisegnata,
     # quindi può cambiarne il valore tramite la sua key.
     st.session_state.nav = HEALTH_CHECK_PAGE
+
+
+def _n_businesses(bundle):
+    """Solo il numero di business, per la telemetria. None se non si riesce a contarli."""
+    try:
+        if bundle.snapshot is not None:
+            return int(len(bundle.snapshot.businesses))
+        names, _, _ = extract_business_from_revenue(bundle.transactions)
+        return len(names)
+    except Exception:
+        return None
 
 # ============================================================================
 # SIDEBAR - NAVIGATION
@@ -73,6 +97,8 @@ with st.sidebar:
         help="Choose which tool to use",
         key="nav",
     )
+    page_key = PAGE_KEYS.get(page, "other")
+    log_page_view(page_key)
     
 
 
@@ -113,6 +139,9 @@ The `.hsg` file is only read, never changed.
     if uploaded_file is not None:
         # Bridge Streamlit bytes → filesystem path for load_data
         suffix = Path(uploaded_file.name).suffix.lower()
+        # stesso file = stessa chiave: lo script rilegge il file a ogni rerun,
+        # l'evento deve partire una volta sola
+        file_key = getattr(uploaded_file, "file_id", None) or f"{uploaded_file.name}:{uploaded_file.size}"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(uploaded_file.getvalue())
             tmp_path = Path(tmp.name)
@@ -130,8 +159,16 @@ The `.hsg` file is only read, never changed.
                 )
             else:
                 st.success(f"✅ CSV loaded: {len(bundle.transactions)} txns")
+            log_once(f"file:{file_key}", "file_loaded", page=page_key,
+                     source=bundle.source, n_businesses=_n_businesses(bundle))
         except ValueError as e:
             st.error(f"Error: {e}")
+            log_once(f"file_error:{file_key}", "file_error", page=page_key,
+                     source=suffix.lstrip("."), error_type=type(e).__name__)
+        except Exception as e:
+            log_once(f"file_error:{file_key}", "file_error", page=page_key,
+                     source=suffix.lstrip("."), error_type=type(e).__name__)
+            raise
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -148,6 +185,8 @@ The `.hsg` file is only read, never changed.
                     st.session_state.bundle = bundle
                     st.session_state.df = bundle.transactions
                     st.session_state.is_sample_data = True
+                    log_event("file_loaded", page=page_key, source="demo",
+                              n_businesses=_n_businesses(bundle))
                     st.rerun()
                 except ValueError as e:
                     st.error(f"Error loading sample: {e}")
@@ -987,6 +1026,9 @@ else:
 
 
 
+render_feedback(page_key)
+
 # Footer
 st.divider()
-st.caption("Big Ambitions Analyzer v3.0 · reads your .hsg save · save parsing based on [big-copilot](https://github.com/PeterHartwieg/big-copilot) by Peter Hartwieg (MIT) · made with Streamlit")
+st.caption("Big Ambitions Analyzer v3.0 · reads your .hsg save · save parsing based on [big-copilot](https://github.com/PeterHartwieg/big-copilot) by Peter Hartwieg (MIT) · made with Streamlit"
+           + (" · anonymous usage stats, no save data" if telemetry_enabled() else ""))
