@@ -23,6 +23,7 @@ from visualization.game_data_page import render_game_data_explorer
 from visualization.health_check_page import render_health_check_page
 from visualization.alerts_view import render_alert_summary
 from visualization.ui_components import inject_css
+from visualization.home_sections import render_overview, render_revenue_section
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
@@ -669,89 +670,17 @@ else:
 
         analyzer = TemporalAnalyzer(df)
             
-        # Main Metrics
-        st.subheader("📊 Overview")
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric(
-                label="📋 Total Transactions",
-                value=f"{len(df):,}"
-            )
-        
-        with col2:
-            st.metric(
-                label="📅 Days Range",
-                value=f"{df['day'].min()} - {df['day'].max()}"
-            )
-        
-        with col3:
-            st.metric(
-                label="📝 Transaction Types",
-                value=df['type'].nunique()
-            )
-        
-        with col4:
-            total_balance = df['balance'].iloc[-1] if len(df) > 0 else 0
-            st.metric(
-                label="💰 Final Balance",
-                value=f"${total_balance:,.0f}"
-            )
-        
+        _bundle_home = st.session_state.get("bundle")
+        render_overview(df, source=getattr(_bundle_home, "source", None))
+
         st.divider()
             
             # extract revenue from data
         business_name, revenue_per_business, revenue_df = extract_business_from_revenue(df)
             
         if len(business_name) > 0:
-                st.subheader("Revenue Analysis")
-                
-                col1, col2 = st.columns([1,2])
-                
-                with col1:
-                    st.write("Total Revenue per Business:")
-                    
-                    # create dataFrame for visualization
-                    revenue_display = pd.DataFrame({
-                        "Business": revenue_per_business.index,
-                        "Total Revenue": revenue_per_business.values
-                    })
-                    
-                    revenue_display = revenue_display.sort_values("Total Revenue", ascending=False)
-                    
-                    # show dataframe
-                    st.dataframe(
-                        revenue_display.style.format({"Total Revenue": "${:,.2f}"}),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                    
-                    # Top performer
-                    top_business = revenue_display.iloc[0]
-                    st.success(f"🏆 Top Performer: **{top_business['Business']}** (${top_business['Total Revenue']:,.2f})")
-                    
-                with col2:
-                    st.write("Revenue Distribution:")
-                    
-                    fig = px.bar(
-                        revenue_display,
-                        x="Business",
-                        y="Total Revenue",
-                        title="Revenue by Business",
-                        color="Total Revenue",
-                        color_continuous_scale="Viridis"
-                    )
-                    
-                    fig.update_layout(
-                        showlegend=False,
-                        height=400,
-                        xaxis_title="",
-                        yaxis_title="Revenue ($)"
-                    )
-                    
-                    fig.update_yaxes(tickformat='$,.0f')
-                    st.plotly_chart(fig, use_container_width=True)
-                    
+                render_revenue_section(df, _bundle_home)
+
                 st.divider()
                 
                 # === P&L ANALYSIS ===

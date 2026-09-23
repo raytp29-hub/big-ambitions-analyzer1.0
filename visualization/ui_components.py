@@ -31,32 +31,43 @@ import streamlit as st
 # TEMA
 # ============================================================================
 
-# Stato: good / warning / critical dalla palette di stato della skill dataviz;
-# info = il blu "over" della staffing heatmap, così le pagine parlano la stessa lingua.
-THEMES = {
-    "dark": {
-        "ink": "#f2f1ed", "muted": "#a3a29d", "line": "rgba(250,250,250,0.12)",
-        "card": "rgba(255,255,255,0.03)", "hover": "rgba(255,255,255,0.05)",
-        "track": "rgba(250,250,250,0.10)",
-        "critical": "#e66767", "warning": "#fab219", "info": "#3987e5",
-        "ok": "#0ca30c", "neutral": "#a3a29d",
-    },
-    "light": {
-        "ink": "#1f1f1e", "muted": "#6b6a66", "line": "rgba(49,51,63,0.15)",
-        "card": "#ffffff", "hover": "rgba(49,51,63,0.04)",
-        "track": "rgba(49,51,63,0.10)",
-        "critical": "#d03b3b", "warning": "#fab219", "info": "#2a78d6",
-        "ok": "#0ca30c", "neutral": "#8a8985",
-    },
+# Il tema (chiaro/scuro) NON si legge da Python per il CSS: st.context.theme può
+# essere vecchio di un rerun (cambi tema dal menu → nessun rerun) e il CSS resterebbe
+# quello sbagliato. Quindi:
+# - i neutri (testo, bordi, sfondi) derivano dal colore del testo della pagina
+#   (currentColor), che Streamlit imposta già giusto per il tema attivo;
+# - i colori di stato sono la palette di stato della skill dataviz, pensata per
+#   funzionare uguale su sfondo chiaro e scuro (e sempre con un'etichetta).
+TOKENS = {
+    "ink":      "currentColor",
+    "muted":    "color-mix(in srgb, currentColor 62%, transparent)",
+    "line":     "color-mix(in srgb, currentColor 20%, transparent)",
+    "card":     "color-mix(in srgb, currentColor 6%, transparent)",
+    "hover":    "color-mix(in srgb, currentColor 9%, transparent)",
+    "track":    "color-mix(in srgb, currentColor 15%, transparent)",
+    "critical": "#d03b3b",
+    "warning":  "#fab219",
+    "info":     "#2a78d6",
+    "ok":       "#0ca30c",
+    "neutral":  "color-mix(in srgb, currentColor 55%, transparent)",
 }
 TONES = ("critical", "warning", "info", "ok", "neutral")
+
+# Palette categoriale per le serie (una linea per business): 8 tinte in ordine
+# fisso, validate per daltonismo nella skill dataviz. Mai ciclare: dalla 9a serie
+# in poi si raggruppa in "Other" (colore OTHER_COLOR).
+CATEGORICAL = {
+    "light": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
+    "dark":  ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
+}
+OTHER_COLOR = {"light": "#8a8985", "dark": "#a3a29d"}
 
 
 def ui_theme() -> str:
     """'dark' o 'light': il tema attivo di Streamlit (st.context.theme dalla 1.46)."""
     try:
         kind = st.context.theme.type
-        if kind in THEMES:
+        if kind in ("dark", "light"):
             return kind
     except Exception:
         pass
@@ -66,16 +77,21 @@ def ui_theme() -> str:
         return "light"
 
 
-def css(theme: str = "dark") -> str:
-    t = THEMES[theme]
-    tokens = "\n".join(f"  --ba-{k}: {v};" for k, v in t.items())
+def css(theme: str | None = None) -> str:
+    """CSS dei componenti. `theme` non serve più (vedi TOKENS): resta per compatibilità."""
+    tokens = "\n".join(f"  --ba-{k}: {v};" for k, v in TOKENS.items())
+    # barre di composizione: primi slot della palette categoriale (versione chiara:
+    # blu/arancio/acqua/giallo si leggono anche su fondo scuro)
+    tokens += "\n" + "\n".join(f"  --ba-c{i + 1}: {c};" for i, c in enumerate(CATEGORICAL["light"]))
+    tokens += "\n  --ba-other: color-mix(in srgb, currentColor 45%, transparent);"
     return f"""
 :root {{
 {tokens}
   --ba-mono: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }}
 .ba-card {{ background: var(--ba-card); border: 1px solid var(--ba-line); border-radius: 10px;
-  padding: 14px 16px; color: var(--ba-ink); height: 100%; box-sizing: border-box; }}
+  padding: 14px 16px; color: var(--ba-ink); height: 100%; box-sizing: border-box;
+  box-shadow: 0 1px 3px color-mix(in srgb, currentColor 10%, transparent); }}
 .ba-card.ba-accent {{ border-top: 3px solid var(--ba-tone); }}
 .ba-card h4 {{ margin: 0; padding: 0; font-size: 1rem; font-weight: 600; color: var(--ba-ink); }}
 .ba-muted {{ color: var(--ba-muted); }}
@@ -125,13 +141,37 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-row {{ display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }}
 .ba-gauge {{ position: relative; height: 8px; background: var(--ba-track); border-radius: 4px; margin: 12px 0 6px; }}
 .ba-gauge > i {{ position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--ba-tone); }}
+.ba-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }}
+@media (max-width: 900px) {{ .ba-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+.ba-kpi {{ display: flex; flex-direction: column; min-height: 178px; }}
+.ba-kpi .ba-label {{ color: var(--ba-muted); font-size: 0.85rem; display: flex; justify-content: space-between; }}
+.ba-kpi .ba-q {{ cursor: help; opacity: .7; }}
+.ba-kpi .ba-graphic {{ margin-top: auto; padding-top: 10px; }}
+.ba-cols {{ display: flex; align-items: flex-end; gap: 3px; height: 44px; }}
+.ba-cols > i {{ flex: 1; background: var(--ba-c1); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }}
+.ba-cols > i:hover {{ opacity: 1; }}
+.ba-days {{ display: flex; gap: 3px; }}
+.ba-days > span {{ flex: 1; text-align: center; font: 0.65rem var(--ba-mono); color: var(--ba-muted); }}
+.ba-days > span > i {{ display: block; height: 22px; border-radius: 4px; margin-bottom: 4px;
+  background: color-mix(in srgb, var(--ba-c1) 70%, transparent); }}
+.ba-days > span.ba-weekend > i {{ background: color-mix(in srgb, var(--ba-c1) 40%, transparent); }}
+.ba-stack {{ display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; }}
+.ba-stack > i {{ display: block; height: 100%; }}
+.ba-legend {{ display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 0.72rem; color: var(--ba-muted); }}
+.ba-legend > span::before {{ content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 4px; background: var(--ba-sw); vertical-align: -1px; }}
+.ba-area {{ display: block; width: 100%; height: 44px; }}
+.ba-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }}
+.ba-delta {{ font: 0.8rem var(--ba-mono); color: var(--ba-muted); }}
+.ba-delta b {{ color: var(--ba-tone); font-weight: 600; }}
+.ba-spark {{ display: block; width: 100%; height: 38px; margin-top: 8px; }}
 .ba-gauge > b {{ position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ba-ink); }}
 """
 
 
 def inject_css() -> None:
     """Da chiamare una volta per pagina, prima dei componenti."""
-    st.html(f"<style>{css(ui_theme())}</style>")
+    st.html(f"<style>{css()}</style>")
 
 
 def _tone(tone: str) -> str:
@@ -326,3 +366,143 @@ def theory_card_html(label: str, actual: str, theory: str, status: str, note: st
 
 def render_theory_card(*args, **kwargs) -> None:
     st.html(theory_card_html(*args, **kwargs))
+
+
+# ============================================================================
+# CARD REVENUE PER BUSINESS (Home)
+# ============================================================================
+
+DELTA_FLAT = 0.02   # entro ±2% la variazione conta come "stabile"
+
+
+def delta_tone(delta: Optional[float]) -> str:
+    if delta is None or abs(delta) < DELTA_FLAT:
+        return "neutral"
+    return "ok" if delta > 0 else "critical"
+
+
+def sparkline_svg(values: list, width: int = 100, height: int = 30) -> str:
+    """Linea SVG (viewBox 100×30, stirata sulla larghezza della card).
+    Il colore arriva dal tono dell'elemento padre (--ba-tone)."""
+    if len(values) < 2:
+        return ""
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    pad = 2
+    points = " ".join(
+        f"{i * width / (len(values) - 1):.1f},{height - pad - (v - lo) / span * (height - 2 * pad):.1f}"
+        for i, v in enumerate(values)
+    )
+    return (f'<svg class="ba-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none">'
+            f'<polyline points="{points}" fill="none" stroke="var(--ba-tone)" stroke-width="1.6" '
+            f'vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>')
+
+
+def revenue_card_html(business: str, total: float, share: float,
+                      delta: Optional[float], daily: list, window: int = 7) -> str:
+    tone = delta_tone(delta)
+    if delta is None:
+        delta_html = f'<div class="ba-delta">not enough days for a {window}-day comparison</div>'
+    else:
+        arrow = "▲" if tone == "ok" else "▼" if tone == "critical" else "＝"
+        delta_html = (f'<div class="ba-delta"><b>{arrow} {abs(delta):.0%}</b> '
+                      f'vs previous {window} days</div>')
+    return (
+        f'<div class="ba-card" {_tone(tone)}>'
+        f'<div class="ba-muted">{escape(business)}</div>'
+        f'<div class="ba-big">${total:,.0f}</div>{delta_html}'
+        f'<div class="ba-bar" style="margin-top:10px;--ba-tone:var(--ba-ok)">'
+        f'<i style="width:{max(share, 0.0) * 100:.1f}%"></i></div>'
+        f'<div class="ba-muted ba-small" style="margin-top:4px">{share:.0%} of total revenue</div>'
+        f'{sparkline_svg(daily)}</div>'
+    )
+
+
+def revenue_cards_html(rows: list, window: int = 7) -> str:
+    """rows = lista di analysis.revenue_analyzer.BusinessRevenue."""
+    cards = "".join(
+        revenue_card_html(r.business, r.total, r.share, r.delta_pct, r.daily, window) for r in rows
+    )
+    return f'<div class="ba-grid">{cards}</div>'
+
+
+def render_revenue_cards(rows: list, window: int = 7) -> None:
+    st.html(revenue_cards_html(rows, window))
+
+
+# ============================================================================
+# CARD KPI (Overview della Home) — stessa altezza, grafico in basso
+# ============================================================================
+
+_WEEKDAY = "MTWTFSS"   # giorno di gioco → (day - 1) % 7, 0 = lunedì (vedi staffing_fit)
+
+
+def kpi_card_html(label: str, value: str, graphic: str = "", sub: str = "",
+                  help: str = "", tone: str = "neutral") -> str:
+    """Card KPI: etichetta (+ ⓘ con spiegazione al passaggio del mouse), valore,
+    riga opzionale sotto (`sub`, HTML già pronto), grafico ancorato in basso."""
+    q = f'<span class="ba-q" title="{escape(help)}">ⓘ</span>' if help else ""
+    return (
+        f'<div class="ba-card ba-kpi" {_tone(tone)}>'
+        f'<div class="ba-label"><span>{escape(label)}</span>{q}</div>'
+        f'<div class="ba-big">{escape(value)}</div>{sub}'
+        f'<div class="ba-graphic">{graphic}</div></div>'
+    )
+
+
+def kpi_row_html(cards: list[str]) -> str:
+    return f'<div class="ba-kpis">{"".join(cards)}</div>'
+
+
+def columns_html(values: list, labels: list) -> str:
+    """Colonne verticali (una per giorno), altezza ∝ valore; hover = etichetta."""
+    top = max(values, default=0) or 1
+    bars = "".join(
+        f'<i style="height:{max(v / top, 0) * 100:.0f}%" title="{escape(str(lab))}: {v:,}"></i>'
+        for v, lab in zip(values, labels)
+    )
+    return f'<div class="ba-cols">{bars}</div>'
+
+
+def day_strip_html(days: list[int]) -> str:
+    """Un blocco per giorno di gioco, con l'iniziale del giorno della settimana
+    (sabato e domenica più tenui): si vede subito quali giorni copre il file."""
+    cells = []
+    for d in days:
+        wd = (int(d) - 1) % 7
+        cls = ' class="ba-weekend"' if wd >= 5 else ""
+        cells.append(f'<span{cls} title="Day {d}"><i></i>{_WEEKDAY[wd]}</span>')
+    return f'<div class="ba-days">{"".join(cells)}</div>'
+
+
+def composition_html(parts: list[tuple[str, float]], top: int = 4) -> str:
+    """Barra 100% impilata: le prime `top` voci con i colori categoriali, il resto 'Other'.
+    Legenda sempre presente (l'identità non è affidata al solo colore)."""
+    total = sum(v for _, v in parts) or 1
+    shown = parts[:top]
+    rest = sum(v for _, v in parts[top:])
+    if rest > 0:
+        shown = shown + [("Other", rest)]
+    segs, legend = [], []
+    for i, (name, v) in enumerate(shown):
+        color = "var(--ba-other)" if name == "Other" else f"var(--ba-c{i + 1})"
+        pct = v / total
+        segs.append(f'<i style="width:{pct * 100:.1f}%;background:{color}" title="{escape(name)}: {pct:.0%}"></i>')
+        legend.append(f'<span style="--ba-sw:{color}">{escape(name)} {pct:.0%}</span>')
+    return f'<div class="ba-stack">{"".join(segs)}</div><div class="ba-legend">{"".join(legend)}</div>'
+
+
+def area_svg(values: list, width: int = 100, height: int = 40) -> str:
+    """Area + linea (saldo): colore dal tono della card padre."""
+    if len(values) < 2:
+        return ""
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    pts = [(i * width / (len(values) - 1), height - 3 - (v - lo) / span * (height - 6))
+           for i, v in enumerate(values)]
+    line = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+    area = f"0,{height} {line} {width},{height}"
+    return (f'<svg class="ba-area" viewBox="0 0 {width} {height}" preserveAspectRatio="none">'
+            f'<polygon points="{area}" fill="var(--ba-tone)" fill-opacity="0.15"/>'
+            f'<polyline points="{line}" fill="none" stroke="var(--ba-tone)" stroke-width="1.6" '
+            f'vector-effect="non-scaling-stroke"/></svg>')
