@@ -164,6 +164,13 @@ table.ba-table .ba-right {{ text-align: right; }}
   margin-right: 4px; background: var(--ba-sw); vertical-align: -1px; }}
 .ba-area {{ display: block; width: 100%; height: 44px; }}
 .ba-kpis.ba-3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+.ba-kpis.ba-5 {{ grid-template-columns: repeat(5, minmax(0, 1fr)); }}
+@media (max-width: 900px) {{ .ba-kpis.ba-3, .ba-kpis.ba-5 {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+.ba-kpi.ba-compact {{ min-height: 0; }}
+.ba-kpi.ba-compact .ba-big {{ font-family: inherit; font-size: 1.15rem; font-weight: 600; line-height: 1.3; }}
+.ba-section {{ font-weight: 600; margin: 14px 0 4px; }}
+.ba-grid-title {{ font-size: 1.05rem; font-weight: 700; margin: 14px 0 2px; }}
+.ba-grid-desc {{ font-size: 0.82rem; color: var(--ba-muted); margin-bottom: 6px; }}
 .ba-cols > i.ba-hl {{ background: var(--ba-warning); opacity: 1; }}
 .ba-note {{ border-left: 3px solid var(--ba-info); background: color-mix(in srgb, var(--ba-info) 10%, transparent);
   padding: 10px 14px; border-radius: 4px; font-size: 0.88rem; line-height: 1.45; margin: 12px 0; }}
@@ -492,12 +499,12 @@ _INFO_ICON = '<span class="ba-i">i</span>'
 
 
 def kpi_card_html(label: str, value: str, graphic: str = "", sub: str = "",
-                  help: str = "", tone: str = "neutral") -> str:
+                  help: str = "", tone: str = "neutral", compact: bool = False) -> str:
     """Card KPI: etichetta (+ ⓘ con spiegazione al passaggio del mouse), valore,
     riga opzionale sotto (`sub`, HTML già pronto), grafico ancorato in basso."""
     q = f'<span class="ba-q" title="{escape(help)}">{_INFO_ICON}</span>' if help else ""
     return (
-        f'<div class="ba-card ba-kpi" {_tone(tone)}>'
+        f'<div class="ba-card ba-kpi{" ba-compact" if compact else ""}" {_tone(tone)}>'
         f'<div class="ba-label"><span>{escape(label)}</span>{q}</div>'
         f'<div class="ba-big">{escape(value)}</div>{sub}'
         f'<div class="ba-graphic">{graphic}</div></div>'
@@ -505,8 +512,8 @@ def kpi_card_html(label: str, value: str, graphic: str = "", sub: str = "",
 
 
 def kpi_row_html(cards: list[str]) -> str:
-    """Riga di card della stessa altezza: 4 colonne, o 3 se le card sono 3."""
-    extra = " ba-3" if len(cards) == 3 else ""
+    """Riga di card della stessa altezza, una colonna per card (max 5)."""
+    extra = {3: " ba-3", 5: " ba-5"}.get(len(cards), "")
     return f'<div class="ba-kpis{extra}">{"".join(cards)}</div>'
 
 

@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit.components.v1 as components
 
 
 from analysis.health_check import (
@@ -17,26 +18,19 @@ from analysis.business_alerts import (
     NON_CUSTOMER_TYPES, SAT_WARNING, _street_label, build_context, demand_status,
 )
 from analysis.business_fit import (
-    STATUS_ICON, evaluate_business, fit_to_df, open_hours_by_day,
+    WINDOW_DAYS, evaluate_business, open_hours_by_day, wage_shares,
 )
 from analysis.staffing_fit import evaluate_staffing, staffing_to_df
 from visualization.staffing_heatmap import staffing_heatmap_spec
+from visualization.schedule_grid import assign_shift_employees, build_day_html, build_station_rows
 from visualization.alerts_view import render_alerts_section
+from visualization.ui_components import (
+    Column, Raw, badge_html, demand_icons_html, kpi_card_html, kpi_row_html,
+    ratio_gauge, render_note, render_open_table, share_gauge, theory_card_html,
+)
 
 
 DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-# Icone delle customer demands (come i "Standards" del sito di Peter:
-# verde se soddisfatta, rossa se manca)
-DEMAND_ICONS = {
-    "ba:customerdemand_music":            "🎵",
-    "ba:customerdemand_employeeuniforms": "👕",
-    "ba:customerdemand_interiordesign":   "🖼️",
-    "ba:customerdemand_seating":          "🪑",
-    "ba:customerdemand_toilet":           "🚽",
-    "ba:customerdemand_toiletprivacy":    "🚪",
-    "ba:customerdemand_sink":             "🚰",
-}
 
 MODE_MINE = "My business (from save)"
 MODE_PLAN = "Plan a new business"
@@ -94,23 +88,19 @@ def _demand_heatmap(internal_name: str, title: str, open_hours: dict | None = No
 # MODALITÀ 1 — IL MIO BUSINESS (dal save)
 # ============================================================================
 
-def _render_demand_chips(bundle, address: str) -> None:
+def _render_demand_icons(bundle, address: str) -> None:
     status = demand_status(bundle.snapshot, build_context(bundle.snapshot))
     status = status[status["address"] == address]
     if status.empty:
         return
-    chips = []
-    for r in status.itertuples():
-        color = "#1f9d55" if r.fulfilled else "#d64545"
-        icon = DEMAND_ICONS.get(r.demand_key, "•")
-        chips.append(
-            f'<span title="{r.demand}: {"met" if r.fulfilled else "missing"}" '
-            f'style="display:inline-block;margin:0 6px 6px 0;padding:4px 10px;'
-            f'border-radius:999px;border:1px solid {color};color:{color};font-size:0.9rem">'
-            f'{icon} {r.demand}</span>'
-        )
-    st.markdown("**Customer demands**", help="Green = met, red = missing. From the game data + your save.")
-    st.markdown("".join(chips), unsafe_allow_html=True)
+    items = [(r.demand_key, r.demand, bool(r.fulfilled)) for r in status.itertuples()]
+    missing = [label for _, label, met in items if not met]
+    summary = ("all met" if not missing else "missing: " + ", ".join(missing))
+    st.html(
+        '<div class="ba-section">Customer demands</div>'
+        f'<div class="ba-muted ba-small">{len(items) - len(missing)}/{len(items)} met · {summary}. '
+        'Hover an icon for its name.</div>' + demand_icons_html(items)
+    )
 
 
 def _render_satisfaction(bundle, address: str) -> None:
@@ -135,6 +125,103 @@ def _render_satisfaction(bundle, address: str) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
+STATUS_TONE = {"ok": "ok", "warn": "warning", "bad": "critical", "info": "info"}
+STATUS_WORD = {"ok": "on track", "warn": "watch", "bad": "fix", "info": "info"}
+
+HOW_TO_READ_THEORY = (
+    "<b>Theory</b> is what this building could do with its foot traffic, customer capacity and "
+    "rent, open during the hours the game's demand curve says matter, using this business type's "
+    "core products. <b>Actual</b> is what your save shows over the last {window} days. "
+    "The bar is your value as a share of the theory (the white mark = 100%): "
+    "green at 85% or more, yellow from 60%, red below. Customers and revenue in the theory are "
+    "<b>estimates</b>: the game adds factors (marketing, prices, competition) the model can't see."
+)
+HOW_TO_READ_FIX = (
+    "Every check where your business is below the model, worst first. <b>Fix</b> (red) = far "
+    "from the theory, <b>watch</b> (yellow) = close but not there. Theory = what the model "
+    "expects, You have = your save. The last column says what the gap is about."
+)
+HOW_TO_READ_HEATMAP = (
+    "<b>How to read the heatmap.</b> Rows = weekdays, columns = hours. The colour is how many "
+    "customers the game sends to this business type at that time (brighter = more). "
+    "<b>Dark cells are the hours you are closed.</b> A bright cell covered by dark means "
+    "customers you are losing: consider opening then."
+)
+
+
+def _profile_cards(profile) -> str:
+    cards = [
+        kpi_card_html("Type", business_type_display_by_name(profile.biz_name), compact=True,
+                      help="Business type from your save."),
+        kpi_card_html("Location", profile.neighbourhood, compact=True,
+                      help=f"Neighbourhood of the building (size {profile.building_size or '?'})."),
+        kpi_card_html("Traffic index", str(profile.traffic), compact=True,
+                      help="Foot traffic of this address in the game data: more traffic = more "
+                           "potential customers. The theory scales with it."),
+        kpi_card_html("Capacity", f"{profile.capacity}/h", compact=True,
+                      help="Most customers per hour this building can serve (from your save). "
+                           "The theory never goes above it."),
+        kpi_card_html("Rent", f"${profile.rent:,.0f}/day", compact=True,
+                      help="Daily rent of this building, from your save."),
+    ]
+    return kpi_row_html(cards)
+
+
+def _row(rows, metric):
+    return next((r for r in rows if r.metric == metric), None)
+
+
+def _theory_cards(bep, actual, rows, staffing, profile) -> str:
+    """Le 3 card Theory vs Actual: revenue, clienti, salari/ricavo."""
+    cards = []
+    rev = _row(rows, "Daily revenue")
+    if rev is not None:
+        ratio = (actual.revenue_per_day / bep.revenue
+                 if actual.revenue_per_day is not None and bep.revenue else None)
+        note = (f"{ratio:.0%} of theory · estimate" if ratio is not None else "no sales data")
+        cards.append(theory_card_html("Daily revenue", rev.actual, rev.theory, rev.status,
+                                      note, *ratio_gauge(ratio)))
+    cus = _row(rows, "Customers / day")
+    if cus is not None:
+        ratio = (actual.customers_per_day / bep.daily_customers
+                 if actual.customers_per_day is not None and bep.daily_customers else None)
+        note = (f"{ratio:.0%} of theory · " if ratio is not None else "") + \
+               f"capacity {profile.capacity}/h · traffic {profile.traffic}"
+        cards.append(theory_card_html("Customers / day", cus.actual, cus.theory, cus.status,
+                                      note, *ratio_gauge(ratio)))
+    wag = _row(rows, "Wages / revenue")
+    if wag is not None:
+        theo, mine = wage_shares(bep, actual, staffing)
+        per_day = actual.wages_per_open_day * (len(actual.open_hours) or 1) / 7
+        note = f"${per_day:,.0f} wages per day · avg ${actual.avg_hourly_wage:,.2f}/h"
+        cards.append(theory_card_html("Wages / revenue", wag.actual, wag.theory, wag.status,
+                                      note, *share_gauge(mine, theo), hint="lower is better"))
+    return kpi_row_html(cards) if cards else ""
+
+
+FIX_COLUMNS = [
+    Column("status", "", align="left"),
+    Column("metric", "Check", align="left"),
+    Column("theory", "Theory", help="What the model expects for this building."),
+    Column("actual", "You have", help="What your save shows."),
+    Column("note", "Why", align="left"),
+]
+
+
+def _render_what_to_fix(rows) -> None:
+    to_fix = sorted((r for r in rows if r.status in ("bad", "warn")), key=lambda r: r.status != "bad")
+    st.subheader("What to fix first")
+    if not to_fix:
+        st.success("Nothing below the model: every check is on track.")
+        return
+    render_note(HOW_TO_READ_FIX)
+    render_open_table(FIX_COLUMNS, [
+        {"status": Raw(badge_html(STATUS_WORD[r.status], STATUS_TONE[r.status])),
+         "metric": r.metric, "theory": r.theory, "actual": r.actual, "note": r.note}
+        for r in to_fix
+    ])
+
+
 def _render_my_business(bundle) -> None:
     biz = bundle.snapshot.businesses
     biz = biz[~biz["business_type"].isin(NON_CUSTOMER_TYPES)].sort_values("business_name")
@@ -143,13 +230,9 @@ def _render_my_business(bundle) -> None:
         return
 
     labels = {r.address: f"{r.business_name} — {_street_label(r.address)}" for r in biz.itertuples()}
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        address = st.selectbox("Your business", options=list(labels), format_func=labels.get,
-                               key="hc_my_business")
-    with col2:
-        window = st.select_slider("Actuals window (days)", options=[7, 14, 30], value=7,
-                                  key="hc_fit_window")
+    address = st.selectbox("Your business", options=list(labels), format_func=labels.get,
+                           key="hc_my_business")
+    window = WINDOW_DAYS
 
     staffing = evaluate_staffing(bundle, address, window)
     profile, bep, actual, rows = evaluate_business(bundle, address, window, staffing=staffing)
@@ -157,61 +240,38 @@ def _render_my_business(bundle) -> None:
         st.warning("Business type not found in the game data.")
         return
 
-    # --- Input del modello, letti dal save (prima erano selectbox) ---
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Type", business_type_display_by_name(profile.biz_name))
-    c2.metric("Location", profile.neighbourhood, help=f"Building {profile.building_size or '?'}")
-    c3.metric("Traffic index", profile.traffic)
-    c4.metric("Capacity", f"{profile.capacity}/h")
-    c5.metric("Rent", f"${profile.rent:,.0f}/day")
+    # --- Input del modello, letti dal save ---
+    st.html(_profile_cards(profile))
 
     left, right = st.columns([3, 2])
     with left:
-        _render_demand_chips(bundle, address)
+        _render_demand_icons(bundle, address)
     with right:
         _render_satisfaction(bundle, address)
 
-    # --- Theory vs Actual ---
+    # --- Theory vs Actual: 3 card ---
     st.subheader("Theory vs Actual")
-    counts = {s: sum(r.status == s for r in rows) for s in STATUS_ICON}
-    st.caption(" · ".join(f"{STATUS_ICON[s]} {n}" for s, n in counts.items() if n))
-    st.dataframe(fit_to_df(rows), hide_index=True, use_container_width=True)
-    st.caption(
-        "Theory = compute_bep with this building's traffic, capacity, rent and your average wage. "
-        f"Actual = your save (last {window} days of sales/customers; current schedule, staff and furniture). "
-        "✅ ≥85% of theory · ⚠️ ≥60% · ❌ below · ℹ️ informative only."
-    )
+    if bep is None:
+        st.info(rows[0].note if rows else "The theoretical model does not apply to this business.")
+    else:
+        render_note(HOW_TO_READ_THEORY.format(window=window))
+        st.html(_theory_cards(bep, actual, rows, staffing, profile))
 
     # --- Personale ora per ora ---
-    if staffing is not None and staffing.roles:
-        _render_staffing(staffing, window)
+    _render_staffing(bundle, address, staffing, window)
 
-    # --- Cosa sistemare prima ---
-    to_fix = [r for r in rows if r.status in ("bad", "warn")]
-    if to_fix:
-        st.subheader("What to fix first")
-        for r in sorted(to_fix, key=lambda r: r.status != "bad"):
-            st.markdown(f"{STATUS_ICON[r.status]} **{r.metric}** — theory {r.theory}, you have {r.actual}. {r.note}")
+    # --- Cosa sistemare prima (tutte le righe del confronto, non solo le 3 card) ---
+    _render_what_to_fix(rows)
 
     # --- Heatmap domanda con i tuoi orari ---
+    st.subheader("Demand vs your opening hours")
+    render_note(HOW_TO_READ_HEATMAP)
     fig = _demand_heatmap(
         profile.biz_name,
         f"Demand vs your opening hours — {profile.business_name}",
         open_hours=open_hours_by_day(bundle.snapshot, address),
     )
     st.plotly_chart(fig, use_container_width=True)
-    st.caption("Brighter = higher demand. Dark cells = hours you are closed: bright + dark means lost customers.")
-
-    if bep is not None:
-        with st.expander("Model details (theoretical setup for this building)"):
-            furniture_rows = [{"Name": f.name, "Qty": f.quantity, "Price": f"${f.price:,.2f}",
-                               "Capacity": f"{f.capacity}/hr", "Total": f"${f.price * f.quantity:,.0f}"}
-                              for f in bep.furniture]
-            st.dataframe(pd.DataFrame(furniture_rows), hide_index=True)
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Theoretical daily profit", f"${bep.profit:,.0f}")
-            m2.metric("Setup cost", f"${bep.setup_cost:,.0f}")
-            m3.metric("Profitable hours (model)", f"{bep.open_hour:02d}:00-{bep.close_hour:02d}:00")
 
 
 def _ui_theme() -> str:
@@ -228,44 +288,232 @@ def _ui_theme() -> str:
         return "light"
 
 
-def _render_staffing(staffing, window: int) -> None:
-    st.subheader("Staffing — theory vs actual")
-    s1, s2, s3 = st.columns(3)
-    s1.metric("Extra wages / week", f"${staffing.wasted_per_week:,.0f}",
-              help="Hours on sales roles beyond what the customers needed, × the role's average wage.")
-    s2.metric("Share of wage bill", f"{staffing.wasted_share:.0%}")
-    s3.metric("Customer data", "real (hour reports)" if staffing.customers_source == "observed"
-              else "game curve (no reports)")
+HOW_TO_READ_STAFFING = (
+    "<b>What this does.</b> The Schedule Optimizer takes this business as it is in your save "
+    "(stations, employees with their wages and demands, opening hours) and the customers it "
+    "really had per hour over the last {window} days, and builds the cheapest schedule that "
+    "still covers them (+25% margin). Below you see your schedule and the optimized one side by "
+    "side, and what changes for each role and employee. Costs are hours × hourly wage, so the "
+    "two numbers compare like for like."
+)
+HOW_TO_READ_HEATMAP_STAFF = (
+    "Blue = more people on shift than needed (extra cost) · red = fewer than needed · grey = "
+    "matched · empty = closed with nobody on shift. Hover a cell for on shift / needed / customers. "
+    "Needed = stations for that hour's customers (+25% margin, at least 1 while open); customers = "
+    "average per weekday × hour over the last {window} days. Cleaning and security assume 1 person "
+    "every open hour."
+)
+CHANGE_TONE = {"dropped": "critical", "fewer": "info", "more": "warning", "added": "warning",
+               "same": "neutral"}
 
-    # --- heatmap per ruolo: in turno − necessari, giorno × ora ---
+
+def _money_delta(v: float) -> str:
+    return f"{'+' if v > 0 else '-' if v < 0 else ''}${abs(v):,.0f}"
+
+
+def _run_optimizer(bundle, address, window):
+    """Carica il business dal save e lancia il solver. Restituisce (setup, current, result)."""
+    from analysis.schedule_compare import run_saved_business
+    return run_saved_business(bundle, address, window)
+
+
+def _render_schedule_compare(entry, window) -> None:
+    from analysis.schedule_compare import compare_schedules
+    setup, current, result = entry["setup"], entry["current"], entry["result"]
+    for note in setup.notes:
+        st.warning(note)
+    if not result.success:
+        st.error(f"The optimizer found no valid schedule: {result.status}. Usually the employees' "
+                 "demands (hours, days off) can't all fit the opening hours: try it in the "
+                 "Schedule Optimizer page, where you can relax them.")
+        return
+
+    cmp = compare_schedules(setup.employees, current, result)
+    saving = cmp.saving
+    share = saving / cmp.current_cost if cmp.current_cost else 0.0
+    cards = [
+        kpi_card_html("Your schedule (save)", f"${cmp.current_cost:,.0f}/week",
+                      sub=f'<div class="ba-delta">{cmp.current_hours} staff-hours</div>',
+                      help="Wages of the shifts in your save: hours × hourly wage.", tone="neutral",
+                      compact=True),
+        kpi_card_html("Optimized", f"${cmp.optimized_cost:,.0f}/week",
+                      sub=f'<div class="ba-delta">{cmp.optimized_hours} staff-hours</div>',
+                      help="Wages of the optimized schedule, same employees and wages.", tone="info",
+                      compact=True),
+        kpi_card_html("Saving" if saving >= 0 else "Extra cost",
+                      f"{_money_delta(-saving)}/week",
+                      sub=f'<div class="ba-delta"><b>{abs(share):.0%}</b> of your wage bill</div>',
+                      help="Optimized − yours. Negative = you save. Positive = your schedule leaves "
+                           "customer hours uncovered and the optimizer adds staff.",
+                      tone="ok" if saving > 0 else "critical" if saving < 0 else "neutral",
+                      compact=True),
+    ]
+    st.html(kpi_row_html(cards))
+
+    cov = result.coverage_report or {}
+    gaps = {r: d for r, d in cov.items() if d.get("real", 0) > 0.5}
+    if gaps:
+        st.warning("Not enough employees to cover every needed hour: " + "; ".join(
+            f"{r} {d['real']:.0f} h uncovered (hire ~{d['suggest']})" for r, d in sorted(gaps.items())))
+    if result.unmet_demands:
+        st.caption("Employee demands the optimizer could not satisfy: " + "; ".join(result.unmet_demands[:6]))
+
+    st.markdown("**What changes per role**")
+    render_open_table([
+        Column("role", "Role", align="left"),
+        Column("now", "Now h/week"),
+        Column("opt", "Optimized h/week"),
+        Column("dh", "Δ hours", fmt=lambda v: f"{v:+d}"),
+        Column("dc", "Δ wages/week", help="Optimized − now. Negative = saving."),
+    ], [{"role": r.role, "now": r.current_hours, "opt": r.optimized_hours, "dh": r.delta_hours,
+         "dc": Raw(badge_html(_money_delta(r.delta_cost),
+                              "ok" if r.delta_cost < 0 else "critical" if r.delta_cost > 0 else "neutral"))}
+        for r in cmp.roles])
+
+    st.markdown("**What changes per employee**")
+    render_open_table([
+        Column("name", "Employee", align="left", sub="role"),
+        Column("wage", "Wage", fmt=lambda v: f"${v:,.2f}/h"),
+        Column("now", "Now h/week"),
+        Column("opt", "Optimized h/week"),
+        Column("change", "Change", help="dropped = no shifts in the optimized schedule; "
+                                        "fewer / more = hours changed."),
+    ], [{"name": e.name, "role": e.role, "wage": e.wage, "now": e.current_hours,
+         "opt": e.optimized_hours,
+         "change": Raw(badge_html(e.status if e.status in ("dropped", "same", "added")
+                                  else f"{e.status} ({e.delta_hours:+d} h)", CHANGE_TONE[e.status]))}
+        for e in cmp.employees])
+
+    # --- griglie affiancate: stesso giorno, tuo sopra, ottimizzato sotto ---
+    _render_day_grids(setup, current, result, cmp.current_cost, cmp.optimized_cost)
+
+
+@st.fragment
+def _render_day_grids(setup, current, result, current_cost: float, optimized_cost: float) -> None:
+    """Fragment: cambiando giorno si ridisegna solo questo blocco, non tutta la pagina
+    (niente ricalcolo di alert, confronto con la teoria, staffing…)."""
+    stations = build_station_rows(setup.selected_furniture)
+    open_days = [d.day_name for d in setup.weekly_schedule if d.is_open]
+    if not stations or not open_days:
+        st.info("No workstations or open days: the day grid is not available.")
+        return
+    st.markdown("**Shifts of one day**")
+    day = st.radio("Day", open_days, horizontal=True, key=f"hc_opt_day_{setup.address}",
+                   label_visibility="collapsed")
+    height = 70 + 49 * (len(stations) + 1)
+    panels = (
+        ("Your schedule (save)",
+         f"The shifts as they are in your save today · ${current_cost:,.0f}/week in wages.",
+         current),
+        ("Optimized",
+         "The cheapest schedule that still covers your real customers (+25% margin), with the same "
+         f"employees, wages and demands · ${optimized_cost:,.0f}/week.",
+         result),
+    )
+    for title, desc, res in panels:
+        st.html(f'<div class="ba-grid-title">{_esc(title)}</div>'
+                f'<div class="ba-grid-desc">{_esc(desc)}</div>')
+        assignment = assign_shift_employees(res, setup.employees, stations)
+        components.html(build_day_html(day, res, stations, assignment, setup.employees),
+                        height=height, scrolling=False)
+
+
+def _role_detail_rows(staffing) -> list[dict]:
+    kind = {"sales": "sales", "appointment": "appointment (indicative)", "presence": "presence (1 per open hour)"}
+    return [{
+        "status": Raw(badge_html(STATUS_WORD[r.status], STATUS_TONE[r.status])),
+        "role": r.role, "kind": kind.get(r.kind, r.kind), "stations": r.stations,
+        "peak": f"{r.peak_needed} / {r.peak_staffed}",
+        "hours": f"{r.hours_needed} / {r.hours_staffed}",
+        "people": f"{r.headcount_needed} / {r.headcount_actual}",
+        "over": r.over_hours, "under": r.under_hours,
+        "wasted": Raw(badge_html(f"${r.wasted_per_week:,.0f}", "critical" if r.wasted_per_week > 0 else "neutral")),
+    } for r in staffing.roles]
+
+
+ROLE_DETAIL_COLUMNS = [
+    Column("status", "", align="left"),
+    Column("role", "Role", align="left", sub="kind"),
+    Column("stations", "Stations"),
+    Column("peak", "Peak need / have", help="Most people needed in the same hour vs most on shift."),
+    Column("hours", "Hours/week need / have"),
+    Column("people", "Employees need / have"),
+    Column("over", "Extra h", help="Person-hours on shift beyond the need."),
+    Column("under", "Missing h", help="Person-hours needed but not on shift."),
+    Column("wasted", "Extra cost/week", help="Extra hours × the role's average wage (sales roles)."),
+]
+
+
+def _render_staffing(bundle, address, staffing, window: int) -> None:
+    st.subheader("Staffing — your schedule vs optimized")
+    render_note(HOW_TO_READ_STAFFING.format(window=window))
+
+    key = f"hc_opt::{address}"
+    entry = st.session_state.get(key)
+    if entry is not None and entry.get("bundle_id") != id(bundle):
+        entry = None                                   # save ricaricato: risultato vecchio
+    label = "Optimize this schedule" if entry is None else "Optimize again"
+    if st.button(label, type="primary", key=f"hc_opt_btn_{address}"):
+        with st.spinner("Running the Schedule Optimizer…"):
+            try:
+                setup, current, result = _run_optimizer(bundle, address, window)
+            except Exception as e:                    # il solver non deve rompere la pagina
+                st.error(f"Optimizer error: {type(e).__name__}: {e}")
+                setup = None
+            if setup is None:
+                st.session_state.pop(key, None)
+                entry = None
+            else:
+                entry = {"bundle_id": id(bundle), "setup": setup, "current": current, "result": result}
+                st.session_state[key] = entry
+    if entry is None:
+        st.caption("Takes a few seconds. Nothing in your save is changed.")
+    else:
+        _render_schedule_compare(entry, window)
+
+    # --- vista ora per ora (senza solver) ---
+    if staffing is None or not staffing.roles:
+        return
+    with st.expander("Hour by hour: staff on shift vs needed, per role"):
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Extra wages / week", f"${staffing.wasted_per_week:,.0f}",
+                  help="Hours on sales roles beyond what the customers needed, × the role's average wage.")
+        s2.metric("Share of wage bill", f"{staffing.wasted_share:.0%}")
+        s3.metric("Customer data", "real (hour reports)" if staffing.customers_source == "observed"
+                  else "game curve (no reports)")
+        _render_role_heatmap(staffing)
+        render_note(HOW_TO_READ_HEATMAP_STAFF.format(window=window))
+        st.markdown("**Details per role**")
+        render_open_table(ROLE_DETAIL_COLUMNS, _role_detail_rows(staffing))
+        over = staffing.top_over_ranges(8)
+        under = staffing.under_ranges()
+        if over:
+            st.markdown(f"**Overstaffed hours** (top {len(over)})")
+            st.html("<ul class=\"ba-issues\">" + "".join(
+                f"<li style=\"--ba-tone: var(--ba-info)\"><span class=\"ba-dot\"></span>{line}</li>"
+                for line in map(_esc, over)) + "</ul>")
+        if under:
+            st.markdown(f"**Understaffed hours** ({len(under)})")
+            st.html("<ul class=\"ba-issues\">" + "".join(
+                f"<li style=\"--ba-tone: var(--ba-critical)\"><span class=\"ba-dot\"></span>{line}</li>"
+                for line in map(_esc, under)) + "</ul>")
+
+
+@st.fragment
+def _render_role_heatmap(staffing) -> None:
+    """Fragment: cambiando ruolo si ridisegna solo la heatmap."""
     order = {"sales": 0, "appointment": 1, "presence": 2}
     roles = [r.role for r in sorted(staffing.roles, key=lambda r: (order.get(r.kind, 9), r.role))]
-    # chiave legata ai ruoli: cambiando business il radio non tiene un ruolo che non c'è
     role = st.radio("Role", roles, horizontal=True, key="hc_staff_role_" + "|".join(roles),
                     label_visibility="collapsed")
     spec = staffing_heatmap_spec(staffing.grid(role), role, theme=_ui_theme())
     st.plotly_chart(go.Figure(spec), use_container_width=True, theme=None,
                     config={"displayModeBar": False})
-    st.caption(
-        "Blue = more people on shift than needed (extra cost) · red = fewer than needed · "
-        "grey = matched · empty = closed with nobody on shift. Hover a cell for on shift / needed / customers. "
-        f"Needed = stations for that hour's customers (+25% margin, at least 1 while open); "
-        f"customers = average per weekday × hour over the last {window} days. "
-        "Cleaning and security assume 1 person every open hour."
-    )
 
-    with st.expander("Details per role"):
-        st.dataframe(staffing_to_df(staffing), hide_index=True, use_container_width=True)
-    over = staffing.top_over_ranges(8)
-    under = staffing.under_ranges()
-    if over:
-        with st.expander(f"Overstaffed hours (top {len(over)})"):
-            for line in over:
-                st.markdown(f"- {line}")
-    if under:
-        with st.expander(f"Understaffed hours ({len(under)})"):
-            for line in under:
-                st.markdown(f"- {line}")
+
+def _esc(text) -> str:
+    from html import escape
+    return escape(str(text))
 
 
 # ============================================================================

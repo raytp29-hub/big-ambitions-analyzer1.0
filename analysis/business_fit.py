@@ -37,7 +37,7 @@ from core.snapshot import Snapshot
 # COSTANTI
 # ============================================================================
 
-WINDOW_DAYS = 7          # finestra dei dati reali (ultimi N giorni di gioco)
+WINDOW_DAYS = 14         # finestra dei dati reali: 2 settimane intere (il save ne tiene ~16)
 DEFAULT_WAGE = 22.0      # salario orario se il business non ha dipendenti
 
 # Stesse fasce del rating di generate_report
@@ -397,21 +397,9 @@ def compare_to_theory(
             f"{actual.staff_assigned} employees assigned · model counts workstations only",
         ))
 
-    # 5. Salari in % del ricavo (soglie assolute, vedi WAGE_SHARE_*).
-    # Tutto per giorno di CALENDARIO: revenue_per_day conta anche i giorni chiusi,
-    # quindi i salari della settimana vanno divisi per 7, non per i giorni aperti.
-    # Teorico: con lo staffing = salari delle ore NECESSARIE sul TUO ricavo
-    # (cioè quanto peserebbero i salari con l'organico giusto).
-    open_days = len(actual.open_hours) or 1
-    wages_per_day = actual.wages_per_open_day * open_days / 7
-    if staffing is not None and staffing.roles and actual.revenue_per_day:
-        needed_hours = sum(r.hours_needed for r in staffing.roles)
-        theo_share = needed_hours * actual.avg_hourly_wage / 7 / actual.revenue_per_day
-    else:
-        theo_wages = bep.employees * actual.avg_hourly_wage * bep.weekly_hours / 7
-        theo_share = theo_wages / bep.revenue if bep.revenue > 0 else None
-    if actual.revenue_per_day:
-        share = wages_per_day / actual.revenue_per_day
+    # 5. Salari in % del ricavo (soglie assolute, vedi WAGE_SHARE_*): vedi wage_shares.
+    theo_share, share = wage_shares(bep, actual, staffing)
+    if share is not None:
         share_label = f"{share:.0%}"
         share_status = "ok" if share <= WAGE_SHARE_OK else "warn" if share <= WAGE_SHARE_WARN else "bad"
     else:
@@ -451,6 +439,25 @@ def compare_to_theory(
         ))
 
     return rows
+
+
+def wage_shares(bep, actual: ActualMetrics, staffing=None) -> tuple[Optional[float], Optional[float]]:
+    """(teorica, tua) quota dei salari sul ricavo, tutto per giorno di CALENDARIO:
+    revenue_per_day conta anche i giorni chiusi, quindi i salari della settimana / 7.
+    Teorica con lo staffing = salari delle ore NECESSARIE sul TUO ricavo (quanto
+    peserebbero con l'organico giusto); senza = dipendenti del modello × ore del modello.
+    None dove manca il ricavo."""
+    open_days = len(actual.open_hours) or 1
+    wages_per_day = actual.wages_per_open_day * open_days / 7
+    if staffing is not None and staffing.roles and actual.revenue_per_day:
+        needed_hours = sum(r.hours_needed for r in staffing.roles)
+        theo = needed_hours * actual.avg_hourly_wage / 7 / actual.revenue_per_day
+    elif bep is not None and bep.revenue > 0:
+        theo = bep.employees * actual.avg_hourly_wage * bep.weekly_hours / 7 / bep.revenue
+    else:
+        theo = None
+    mine = wages_per_day / actual.revenue_per_day if actual.revenue_per_day else None
+    return theo, mine
 
 
 def fit_to_df(rows: list[FitRow]) -> pd.DataFrame:

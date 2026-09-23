@@ -78,6 +78,7 @@ class SavedScheduleSetup:
     current_weekly_cost: float        # salari dei turni attuali nel save
     current_weekly_hours: int
     notes: list = field(default_factory=list)   # avvisi per l'utente
+    employee_ids: list = field(default_factory=list)   # id del save, allineati a `employees`
 
 
 # ============================================================================
@@ -315,4 +316,5 @@ def load_schedule_setup(bundle: DataBundle, address: str, window_days: int = 14,
         current_weekly_cost=current_cost,
         current_weekly_hours=current_hours,
         notes=notes,
+        employee_ids=[str(i) for i in emp["employee_id"]],
     )
