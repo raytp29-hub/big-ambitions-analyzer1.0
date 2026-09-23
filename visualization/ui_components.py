@@ -156,10 +156,13 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-i {{ display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%;
   border: 1.4px solid currentColor; font: 700 9.5px/1 Georgia, serif; box-sizing: border-box; }}
 .ba-kpi .ba-q:hover {{ color: var(--ba-ink); }}
-.ba-kpi .ba-graphic {{ margin-top: auto; padding-top: 10px; }}
+.ba-kpi .ba-graphic {{ margin-top: auto; padding-top: 10px; overflow: hidden; }}
 .ba-cols {{ display: flex; align-items: flex-end; gap: 3px; height: 44px; }}
 .ba-cols > i {{ flex: 1; background: var(--ba-c1); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }}
 .ba-cols > i:hover {{ opacity: 1; }}
+.ba-cols.ba-dense {{ gap: 1px; }}
+.ba-wklabels {{ display: flex; gap: 3px; margin-top: 4px; }}
+.ba-wklabels > span {{ flex: 1; text-align: center; font: 0.65rem var(--ba-mono); color: var(--ba-muted); }}
 .ba-days {{ display: flex; gap: 3px; }}
 .ba-days > span {{ flex: 1; text-align: center; font: 0.65rem var(--ba-mono); color: var(--ba-muted); }}
 .ba-days > span > i {{ display: block; height: 22px; border-radius: 4px; margin-bottom: 4px;
@@ -526,13 +529,31 @@ def kpi_row_html(cards: list[str]) -> str:
 
 
 def columns_html(values: list, labels: list) -> str:
-    """Colonne verticali (una per giorno), altezza ∝ valore; hover = etichetta."""
+    """Colonne verticali (una per giorno), altezza ∝ valore; hover = etichetta.
+    Oltre 30 colonne lo spazio fra le barre si riduce (sennò non ci stanno)."""
     top = max(values, default=0) or 1
     bars = "".join(
         f'<i style="height:{max(v / top, 0) * 100:.0f}%" title="{escape(str(lab))}: {v:,}"></i>'
         for v, lab in zip(values, labels)
     )
-    return f'<div class="ba-cols">{bars}</div>'
+    dense = " ba-dense" if len(values) > 30 else ""
+    return f'<div class="ba-cols{dense}">{bars}</div>'
+
+
+WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def weekday_columns_html(avg_by_weekday: list, days_by_weekday: list, unit: str = "transactions") -> str:
+    """Grafico statico a 7 colonne (lunedì → domenica): media per giorno della settimana.
+    Stessa dimensione con 10 o 200 giorni di dati; hover = giorno, quanti giorni, media."""
+    top = max(avg_by_weekday, default=0) or 1
+    bars, labels = [], []
+    for i, (avg, n) in enumerate(zip(avg_by_weekday, days_by_weekday)):
+        tip = f"{WEEKDAY_NAMES[i]} · {n} day{'s' if n != 1 else ''} · avg {avg:,.0f} {unit}/day"
+        bars.append(f'<i style="height:{max(avg / top, 0) * 100:.0f}%" title="{escape(tip)}"></i>')
+        labels.append(f"<span>{_WEEKDAY[i]}</span>")
+    return (f'<div class="ba-cols">{"".join(bars)}</div>'
+            f'<div class="ba-wklabels">{"".join(labels)}</div>')
 
 
 def day_strip_html(days: list[int]) -> str:

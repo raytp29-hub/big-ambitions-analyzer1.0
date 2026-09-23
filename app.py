@@ -182,7 +182,7 @@ The `.hsg` file is only read, never changed.
     This tool helps you analyze your Big Ambitions
     business data with professional insights.
     
-    **Version:** 2.0.0  
+    **Version:** 3.0.0  
     **Updated:** September 2026
     """)
     
@@ -524,148 +524,57 @@ else:
     st.divider()
     
     if st.session_state.df is None:
-        # Welcome / User Guide
-        st.info("👆 **Upload a CSV or XLSM file from the sidebar to get started!**")
+        # Welcome / User Guide (nessun file caricato)
+        st.info("👈 **Load your save file (.hsg) from the sidebar** to get started, "
+                "or click **Test it (Demo Data)** to try the app with a sample export.")
 
-        # Highlighted, can't-miss note about exporting in English
-        st.warning("🌍 **Important: set the game language to English before exporting your data.** "
-                   "Files in any language now load, but the Profit & Loss analysis categorizes "
-                   "transactions by their English names — non-English exports won't categorize correctly.")
-
-        # --- Quick Start ---
-        st.subheader("🚀 Quick Start")
+        st.subheader("🚀 Quick start")
         st.markdown("""
-        1. **Export** your transaction data from Big Ambitions (CSV or XLSM)
-        2. **Upload** the file using the sidebar uploader
-        3. **Explore** the dashboard and navigate to other modules from the sidebar
-        """)
+1. **Find your save**: open *Where do I find my save file (.hsg)?* in the sidebar. Use your own
+   save or the game's automatic ones (`Recover #0/#1/#2.hsg`, `Recover Midnight.hsg`), the most recent.
+2. **Upload it** in the sidebar. The file is only read, in your session: nothing is changed or stored.
+3. **Explore**: this page gives the overview, the **Business Health Check** tells you what to fix in
+   each business, the **Schedule Optimizer** builds a cheaper schedule for any of them.
+""")
 
-        st.divider()
-
-        # --- Features Overview ---
-        st.subheader("✨ Features Overview")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("""
-            #### 📈 Profit & Loss Analysis
-            - Automatic transaction categorization
-            - Product and category-level profitability
-            - Interactive filtering and sorting
-            - Export results to CSV
-
-            #### 📊 Temporal Trend Analysis
-            - Revenue, expenses, and profit over time
-            - Daily, weekly, and monthly views
-            - Interactive Plotly charts
-            - Identify patterns and growth trends
-            """)
-
-        with col2:
-            st.markdown("""
-            #### 🧮 Schedule Optimizer
-            - Optimal employee schedules via linear programming
-            - Respects part-time / full-time preferences
-            - Accounts for days off and hour limits
-            - Business capacity (furniture / workstations)
-            - **No data upload needed** — works standalone!
-
-            #### 🏥 Business Health Check
-            - Break-even point analysis
-            - Zone ranking and demand heatmap
-            - Performance scoring
-            """)
-
-        st.divider()
-
-        # --- Page-by-page Guide ---
-        st.subheader("📍 Page Guide")
-
-        with st.expander("📊 Main Dashboard", expanded=False):
-            st.markdown("""
-            The page you're on right now. Once you upload your transaction file it shows:
-            - **Overview metrics** — total transactions, date range, transaction types, final balance
-            - **Revenue Analysis** — revenue per business with charts
-            - **Profit & Loss** — full P&L statement with waterfall visualisation
-            - **Temporal Trends** — profit evolution over time
-            - **Cost Breakdown** — detailed expense categories and wage analysis
-            - **Data Exploration** — raw data preview, statistics, and custom filters
-            """)
-
-        with st.expander("🗓️ Schedule Optimizer", expanded=False):
-            st.markdown("""
-            Generate optimal employee schedules without uploading any data.
-
-            **How to use:**
-            1. **Business Setup** — choose category and building size
-            2. **Furniture Selection** — pick workstations to determine customer capacity
-            3. **Add Employees** — set names, wages, full-time / part-time, days off
-            4. **Set Demands** — configure hourly customer demand
-            5. **Operating Hours** — define open / close times
-            6. **Optimize** — the solver finds the best schedule in under 1 second
-            """)
-
-        with st.expander("📈 Forecasting", expanded=False):
-            st.markdown("""
-            Predict future business metrics using your historical data.
-
-            - Choose between **Linear Regression** and **Moving Average** models
-            - Forecast revenue, expenses, or profit
-            - Adjustable forecast horizon
-            - Requires uploaded transaction data
-            """)
-
-        with st.expander("🎮 Game Data Explorer", expanded=False):
-            st.markdown("""
-            Browse built-in game data — no upload needed.
-
-            - Explore products, categories, and base prices
-            - Compare business types and their characteristics
-            - Useful for planning new ventures in-game
-            """)
-
-        with st.expander("🏥 Business Health Check", expanded=False):
-            st.markdown("""
-            Standalone analysis tool — no upload needed.
-
-            - **Break-Even Point** — find how many sales you need to cover costs
-            - **Zone Ranking** — compare city zones by foot traffic and rent
-            - **Demand Heatmap** — visualise customer demand across hours and days
-            - **Performance Score** — overall health grade for your business
-            """)
-
-        st.divider()
-
-        # --- How it works ---
-        st.subheader("⚙️ How It Works")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("""
-            **Transaction Analysis**
-            1. Parse CSV / XLSM with error handling
-            2. Categorize transactions via pattern matching
-            3. Aggregate by product, category, and time
-            4. Generate interactive visualizations
-            """)
-        with col2:
-            st.markdown("""
-            **Schedule Optimization**
-            - Uses **linear programming** (PuLP + CBC solver)
-            - Binary variables: employee ↔ shift assignments
-            - Maximizes satisfaction while respecting constraints
-            - Solves in milliseconds for realistic setups
-            """)
-
-        st.divider()
-
-        # --- Call to action ---
-        st.subheader("💡 Start Exploring!")
+        st.subheader("✨ What you get from a save")
         c1, c2 = st.columns(2)
         with c1:
-            st.info("📂 **Upload your data** from the sidebar to unlock the full dashboard.")
+            st.markdown("""
+#### 📊 Main Dashboard
+- Business alerts by urgency: critical, warning, info
+- Overview, revenue per business with daily trend
+- Profit & Loss per business, with each cost explained
+- Margin of every item you sell
+- Customers per hour, per business
+
+#### 🗓️ Schedule Optimizer
+- Loads a business straight from your save: stations, employees, wages, demands, hours
+- Cheapest schedule that covers your real customers per hour
+- Or set up any business by hand (no file needed)
+""")
         with c2:
-            st.info("🗓️ **Try the Schedule Optimizer** — no data needed! Select it from the sidebar navigation.")
+            st.markdown("""
+#### 🏥 Business Health Check
+- One card per business with its problems and customer demands
+- Your business vs what its building could do (theory vs actual)
+- Your schedule next to the optimized one, per role and employee
+- Written advice on opening hours and an action plan
+- Planner for a new business: products, zones, break-even
+
+#### 📈 Forecasting · 🎮 Game Data Explorer
+- Revenue and profit trends with a simple forecast
+- Products, business types and prices from the game data
+""")
+
+        st.subheader("📄 Only have a transactions export?")
+        st.caption(
+            "The old CSV / XLSM export still works for the dashboard, P&L and forecasting. "
+            "Set the game language to **English** before exporting: files in other languages load, "
+            "but the P&L categorizes transactions by their English names. "
+            "Alerts, item margins, hourly traffic and the Health Check need the .hsg save."
+        )
+
     else:
         df = st.session_state.df
         st.success(f"✅ Analyzing {len(df):,} transactions!")
@@ -1080,4 +989,4 @@ else:
 
 # Footer
 st.divider()
-st.caption("Made with ❤️ using Streamlit | Big Ambitions Analyzer v2.0 | Now with Schedule Optimizer! ✨")
+st.caption("Big Ambitions Analyzer v3.0 · reads your .hsg save · save parsing based on [big-copilot](https://github.com/PeterHartwieg/big-copilot) by Peter Hartwieg (MIT) · made with Streamlit")

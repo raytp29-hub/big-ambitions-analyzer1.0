@@ -1,5 +1,5 @@
 # Core Dependencies
-streamlit>=1.29.0  # 1.29+ per st.container(border=True) nel pannello Recommendations
+streamlit>=1.46.0  # st.fragment (1.37), st.html, st.context.theme (1.46)
 pandas>=2.0.0
 numpy>=1.24.0
 pulp>=2.7.0  # Per ottimizzazione turni

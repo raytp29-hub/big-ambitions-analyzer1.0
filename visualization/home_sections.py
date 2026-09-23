@@ -14,12 +14,13 @@ from analysis.revenue_analyzer import (
     DELTA_WINDOW, daily_revenue_by_business, summarize_revenue,
 )
 from visualization.ui_components import (
-    CATEGORICAL, OTHER_COLOR, Column, Raw, area_svg, badge_html, columns_html,
+    CATEGORICAL, OTHER_COLOR, Column, Raw, area_svg, badge_html, columns_html, weekday_columns_html,
     composition_html, day_strip_html, delta_tone, kpi_card_html, kpi_row_html,
     hour_columns_html, render_note, render_open_table, render_revenue_cards, ui_theme,
 )
 
 MAX_SERIES = 8   # oltre, i business più piccoli finiscono in "Other"
+RECENT_DAYS = 30 # card "Total transactions": colonne solo degli ultimi N giorni
 
 
 # ============================================================================
@@ -36,22 +37,29 @@ def render_overview(df: pd.DataFrame, source: str | None = None) -> None:
     balance = df.sort_values("day", kind="stable").groupby("day")["balance"].last()
     type_counts = df["type"].value_counts()
 
-    # --- 1. transazioni ---
+    # --- 1. transazioni: colonne per giorno, al massimo gli ultimi RECENT_DAYS ---
     avg = per_day.mean() if len(per_day) else 0
+    recent = per_day.tail(RECENT_DAYS)
+    last_note = f" · last {len(recent)} days shown" if len(per_day) > RECENT_DAYS else ""
     c1 = kpi_card_html(
         "📋 Total transactions", f"{len(df):,}",
-        sub=f'<div class="ba-delta">≈ {avg:,.0f} per day</div>',
-        graphic=columns_html(per_day.tolist(), [f"Day {d}" for d in per_day.index]),
-        help="Columns = transactions per game day (hover for the number). The first and last day "
-             "can be partial: the save cuts the oldest rows, and the current day is still running.",
+        sub=f'<div class="ba-delta">≈ {avg:,.0f} per day{last_note}</div>',
+        graphic=columns_html(recent.tolist(), [f"Day {d}" for d in recent.index]),
+        help=f"Columns = transactions per game day (last {RECENT_DAYS} at most; hover for the number). "
+             "The first and last day can be partial: the save cuts the oldest rows, and the current "
+             "day is still running.",
         tone="info",
     )
-    # --- 2. giorni ---
+    # --- 2. giorni: grafico statico lun → dom, media transazioni per giorno della settimana ---
+    wd = per_day.groupby([(d - 1) % 7 for d in per_day.index])
+    avg_wd = [float(wd.mean().get(i, 0.0)) for i in range(7)]
+    n_wd = [int(wd.size().get(i, 0)) for i in range(7)]
     c2 = kpi_card_html(
         "📅 Days analyzed", f"{len(days)} days",
         sub=f'<div class="ba-delta">Day {days[0]} → {days[-1]}</div>' if days else "",
-        graphic=day_strip_html(days),
-        help="One block per game day in the file, with its weekday (weekend lighter).",
+        graphic=weekday_columns_html(avg_wd, n_wd),
+        help="Columns = average transactions per weekday, Monday → Sunday (hover: how many days "
+             "of that weekday are in the file and the average).",
         tone="info",
     )
     # --- 3. tipi ---
