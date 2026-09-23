@@ -156,8 +156,8 @@ def render_alerts_section(bundle) -> None:
     counts = summarize(alerts)
     st.caption(
         f"{counts['critical']} critical · {counts['warning']} warning · {counts['info']} info. "
-        "The coloured edge shows each business's most urgent problem. Icons = customer demands "
-        "(green met, red crossed missing): hover an icon for its name. "
+        "The coloured edge shows each business's most urgent problem. At the bottom, the "
+        "customer demands: ✓ met, ✕ missing (red). "
         "Click \"+N more\" inside a card to see the rest of its issues."
     )
     only_issues = st.toggle("Only critical and warning", key="hc_only_issues",

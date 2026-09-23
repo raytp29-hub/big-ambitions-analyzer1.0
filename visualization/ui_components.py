@@ -124,6 +124,14 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-help {{ border-bottom: 1px dotted var(--ba-muted); cursor: help; }}
 .ba-inline {{ display: inline-flex; align-items: center; gap: 10px; }}
 .ba-inline .ba-bar {{ width: 70px; }}
+.ba-chips {{ display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }}
+.ba-chip {{ display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px;
+  border-radius: 6px; font-size: 0.8rem; line-height: 1.3; color: var(--ba-ink);
+  border: 1px solid var(--ba-line); background: var(--ba-card); }}
+.ba-chip img {{ width: 15px; height: 15px; display: block; }}
+.ba-chip b {{ color: var(--ba-tone); font-size: 0.72rem; }}
+.ba-chip.ba-miss {{ border-color: color-mix(in srgb, var(--ba-critical) 55%, transparent);
+  background: color-mix(in srgb, var(--ba-critical) 10%, transparent); }}
 .ba-icons {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }}
 .ba-icon {{ width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
   position: relative; color: var(--ba-tone);
@@ -352,23 +360,23 @@ _FALLBACK_ICON = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8v4M12 16h.01"
 
 
 def demand_icons_html(items: list[tuple[str, str, bool]]) -> str:
-    """items = [(demand_key, etichetta, soddisfatta)]. Verde = ok, rossa barrata = manca.
-    Hover = etichetta + stato (lo stato non è affidato al solo colore)."""
-    icons = []
+    """items = [(demand_key, etichetta, soddisfatta)] → "chip" con icona, NOME sempre visibile
+    e ✓ / ✕. Le demand mancanti hanno bordo e sfondo rossi. Stato mai affidato al solo colore:
+    c'è il segno e la parola nel tooltip."""
+    chips = []
     for key, label, met in items:
         path = _ICON_PATHS.get(key, _FALLBACK_ICON)
         tone = "ok" if met else "critical"
         state = "met" if met else "missing"
-        miss = "" if met else " ba-miss"
         svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
-               f'stroke="{TONE_HEX[tone]}" stroke-width="1.8" stroke-linecap="round" '
+               f'stroke="{TONE_HEX[tone]}" stroke-width="1.9" stroke-linecap="round" '
                f'stroke-linejoin="round"><path d="{path}"/></svg>')
-        icons.append(
-            f'<span class="ba-icon{miss}" {_tone(tone)} title="{escape(label)}: {state}">'
-            f'{svg_img(svg, alt=f"{label}: {state}")}'
-            f'<span class="ba-tip">{escape(label)} · {state}</span></span>'
+        chips.append(
+            f'<span class="ba-chip{"" if met else " ba-miss"}" {_tone(tone)} title="{escape(label)}: {state}">'
+            f'{svg_img(svg, alt="")}<span>{escape(label)}</span>'
+            f'<b>{"✓" if met else "✕"}</b></span>'
         )
-    return f'<div class="ba-icons">{"".join(icons)}</div>'
+    return f'<div class="ba-chips">{"".join(chips)}</div>'
 
 
 def render_demand_icons(items: list[tuple[str, str, bool]]) -> None:

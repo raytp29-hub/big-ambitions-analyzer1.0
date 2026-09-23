@@ -414,8 +414,17 @@ def compare_to_theory(
     # 6. Arredi: una riga per pezzo teorico. Gli "obbligatori" del modello
     # (MANDATORY_FURNITURE) non valgono per ogni tipo (un ufficio non ha la
     # cassa): se mancano è solo un'informazione, non un errore.
+    # Le POSTAZIONI si contano per ruolo, non per oggetto esatto: il modello sceglie
+    # "Computer" (il più economico), ma 49 Desktop Computer + 1 Laptop sono comunque
+    # 50 postazioni da avvocato. Gli altri arredi restano per nome.
+    role_of = _station_role_lookup(profile.biz_name) if name_to_key else (lambda key: None)
     for f in bep.furniture:
-        have = count_matching(actual.furniture, f.name, name_to_key)
+        key = (name_to_key or {}).get(f.name)
+        role = role_of(key) if key else None
+        if role:
+            have = sum(int(n) for k, n in actual.furniture.items() if role_of(k) == role)
+        else:
+            have = count_matching(actual.furniture, f.name, name_to_key)
         if have >= f.quantity:
             status = "ok"
         elif f.name in mandatory:
@@ -424,6 +433,8 @@ def compare_to_theory(
             status = "bad" if have == 0 else "warn"
         if f.name in mandatory:
             note = "model default" + ("" if have else " · may not apply to this type")
+        elif role:
+            note = f"any {role} workstation counts · {f.capacity}/h each"
         else:
             note = f"{f.capacity}/h each"
         rows.append(FitRow(f"Furniture · {f.name}", str(f.quantity), str(have), status, note))
@@ -459,6 +470,20 @@ def wage_shares(bep, actual: ActualMetrics, staffing=None) -> tuple[Optional[flo
         theo = None
     mine = wages_per_day / actual.revenue_per_day if actual.revenue_per_day else None
     return theo, mine
+
+
+def _station_role_lookup(biz_name: str):
+    """item_key → ruolo della postazione (es. "Lawyer") o None se non è una postazione."""
+    from analysis.staffing_fit import business_skills, station_for
+    skills = business_skills(biz_name)
+    cache: dict[str, Optional[str]] = {}
+
+    def role_of(key: str) -> Optional[str]:
+        if key not in cache:
+            st_ = station_for(key, skills)
+            cache[key] = st_.role if st_ else None
+        return cache[key]
+    return role_of
 
 
 def fit_to_df(rows: list[FitRow]) -> pd.DataFrame:

@@ -98,8 +98,8 @@ def _render_demand_icons(bundle, address: str) -> None:
     summary = ("all met" if not missing else "missing: " + ", ".join(missing))
     st.html(
         '<div class="ba-section">Customer demands</div>'
-        f'<div class="ba-muted ba-small">{len(items) - len(missing)}/{len(items)} met · {summary}. '
-        'Hover an icon for its name.</div>' + demand_icons_html(items)
+        f'<div class="ba-muted ba-small">{len(items) - len(missing)}/{len(items)} met · {summary}.</div>'
+        + demand_icons_html(items)
     )
 
 
@@ -222,6 +222,127 @@ def _render_what_to_fix(rows) -> None:
     ])
 
 
+def _hours_advice(bundle, profile, address, bep, window):
+    """Consigli sugli orari: ore del modello chiuse / ore aperte con pochi clienti veri."""
+    from analysis.business_fit import _window
+    from analysis.health_check import demand_matrix
+    from analysis.hours_advice import hours_advice
+    from analysis.staffing_fit import observed_customers
+    if bep is None:
+        return []
+    days = _window(bundle.hour_reports, window)
+    observed = observed_customers(bundle.hour_reports, profile.business_name, days) or None
+    cap = min(sum(f.capacity * f.quantity for f in bep.furniture), profile.capacity) or profile.capacity
+    return hours_advice(demand_matrix(profile.biz_name), bep.open_hours,
+                        open_hours_by_day(bundle.snapshot, address), profile.traffic, cap, observed)
+
+
+def _advice_sentence(a) -> tuple[str, str, str]:
+    """(tono, titolo, spiegazione) per un HoursAdvice."""
+    if a.kind == "closed_day":
+        return ("warning", f"Open on {a.days_label}",
+                f"{a.hours_label}: the game sends customers on those days and you're closed "
+                f"— about {a.customers_per_week:,.0f} customers a week (model estimate).")
+    if a.kind == "open_more":
+        return ("warning", f"Open {a.hours_label} on {a.days_label}",
+                f"demand is high then and you're closed — about {a.customers_per_week:,.0f} "
+                "customers a week (model estimate).")
+    per_hour = a.customers_per_week / max(len(a.days) * len(a.hours), 1)
+    return ("info", f"Consider closing {a.hours_label} on {a.days_label}",
+            f"outside the demand hours and only {per_hour:.1f} customers per hour in your save: "
+            "you pay staff for almost nobody.")
+
+
+def _issue_list(items: list[tuple[str, str, str]], numbered: bool = False) -> str:
+    """Elenco con pallino di tono: (tono, titolo in grassetto, testo)."""
+    from html import escape
+    li = []
+    for i, (tone, title, text) in enumerate(items, 1):
+        num = f"{i}. " if numbered else ""
+        li.append(f'<li style="--ba-tone: var(--ba-{tone})"><span class="ba-dot"></span>'
+                  f'<b>{num}{escape(title)}</b> <span class="ba-muted">— {escape(text)}</span></li>')
+    return f'<ul class="ba-issues">{"".join(li)}</ul>'
+
+
+def _render_hours_advice(tips) -> None:
+    st.markdown("**What we'd change in your hours**")
+    if not tips:
+        st.success("Your opening hours match the demand curve: nothing to change.")
+        return
+    opens = [t for t in tips if t.kind != "close"][:3]
+    closes = [t for t in tips if t.kind == "close"][:3]
+    st.html(_issue_list([_advice_sentence(t) for t in opens + closes]))
+
+
+OUTCOME_METRICS = {"Daily revenue", "Customers / day", "Wages / revenue", "Opening hours", "Model"}
+
+
+def _row_action(r) -> tuple[str, str, str] | None:
+    """Una riga del confronto → azione concreta (None se è un risultato, non un'azione)."""
+    tone = "critical" if r.status == "bad" else "warning"
+    if r.metric.startswith("Furniture · "):
+        name = r.metric.split(" · ", 1)[1]
+        try:
+            n = int(r.theory) - int(r.actual)
+        except ValueError:
+            n = 0
+        return (tone, f"Buy {n} × {name}" if n > 0 else f"Check {name}",
+                f"the model needs {r.theory}, you have {r.actual} ({r.note}).")
+    if r.metric == "Core products sold":
+        return (tone, "Stock the missing core products", r.note + ".")
+    return None
+
+
+def _render_action_plan(bundle, address, rows, staffing, hours_tips) -> None:
+    """Mini report: le azioni più utili, prese da tutte le sezioni della pagina, in ordine."""
+    items = []
+    # 1. customer demands mancanti
+    status = demand_status(bundle.snapshot, build_context(bundle.snapshot))
+    missing = status[(status["address"] == address) & ~status["fulfilled"]]["demand"].tolist()
+    if missing:
+        items.append(("critical", "Add the missing customer demands",
+                      ", ".join(missing) + ": customers expect them and satisfaction drops without."))
+    # 2. arredi e prodotti mancanti (righe "fix" prima, poi "watch")
+    for want in ("bad", "warn"):
+        for r in rows:
+            if r.status == want and r.metric not in OUTCOME_METRICS:
+                act = _row_action(r)
+                if act:
+                    items.append(act)
+    # 3. orari: il consiglio più utile per tipo
+    for kind in ("closed_day", "open_more", "close"):
+        tip = next((t for t in hours_tips if t.kind == kind), None)
+        if tip:
+            items.append(_advice_sentence(tip))
+    # 4. personale: risultato del solver se c'è, altrimenti lo spreco stimato
+    entry = st.session_state.get(f"hc_opt::{address}")
+    if entry and entry.get("bundle_id") == id(bundle) and entry["result"].success:
+        from analysis.schedule_compare import compare_schedules
+        cmp = compare_schedules(entry["setup"].employees, entry["current"], entry["result"])
+        if cmp.saving > 0:
+            items.append(("warning", "Adopt the optimized schedule",
+                          f"saves ${cmp.saving:,.0f} a week with the same employees (see Staffing)."))
+    elif staffing is not None and staffing.wasted_per_week >= 300:
+        items.append(("warning", "Cut the extra shifts",
+                      f"~${staffing.wasted_per_week:,.0f} a week goes to sales staff beyond what the "
+                      "customers need: run the optimizer in Staffing to see where."))
+
+    st.subheader("Your action plan")
+    # contesto: dove sei rispetto al modello (risultato, non azione)
+    rev = next((r for r in rows if r.metric == "Daily revenue"), None)
+    lead = ""
+    if rev is not None and rev.status in ("bad", "warn"):
+        lead = (f"Revenue is {rev.actual} a day against {rev.theory} in the model. "
+                "These are the likely causes, most urgent first.")
+    if not items:
+        st.success("Nothing urgent: this business is in line with the model.")
+        return
+    # "$" nel markdown di Streamlit apre una formula LaTeX: va scritto "\\$"
+    st.caption((lead or "The most useful things to do for this business, collected from every "
+                        "section above, most urgent first.").replace("$", "\\$"))
+    st.html(f'<div class="ba-card" style="height:auto">{_issue_list(items[:6], numbered=True)}</div>')
+
+
 def _render_my_business(bundle) -> None:
     biz = bundle.snapshot.businesses
     biz = biz[~biz["business_type"].isin(NON_CUSTOMER_TYPES)].sort_values("business_name")
@@ -272,6 +393,11 @@ def _render_my_business(bundle) -> None:
         open_hours=open_hours_by_day(bundle.snapshot, address),
     )
     st.plotly_chart(fig, use_container_width=True)
+    hours_tips = _hours_advice(bundle, profile, address, bep, window)
+    _render_hours_advice(hours_tips)
+
+    # --- Mini report: le cose da fare, in ordine ---
+    _render_action_plan(bundle, address, rows, staffing, hours_tips)
 
 
 def _ui_theme() -> str:
