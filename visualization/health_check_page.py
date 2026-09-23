@@ -520,137 +520,160 @@ def _esc(text) -> str:
 # MODALITÀ 2 — PIANIFICA UN NUOVO BUSINESS (input manuali, come prima)
 # ============================================================================
 
+HOW_TO_READ_PRODUCTS = (
+    "Products this business type can sell, best first. <b>Score</b> = margin × probability that "
+    "a customer buys it: the higher, the more it's worth stocking. Products marked <b>core</b> are "
+    "the ones the break-even model below uses to estimate revenue per customer."
+)
+HOW_TO_READ_ZONES = (
+    "Neighbourhoods ranked by average foot traffic of their buildings: more traffic = more "
+    "potential customers. <b>Product match</b> = how many of this type's products sell in that area."
+)
+HOW_TO_READ_BEP = (
+    "An <b>estimate</b> for one building: the model fills it with the minimum furniture to reach "
+    "its customer capacity, opens it in the hours the game's demand curve says matter (day by day) "
+    "and sells the core products. All figures are per calendar day. <b>Break even</b> = days to earn "
+    "back the setup cost."
+)
+HOW_TO_READ_PLAN_HEATMAP = (
+    "<b>How to read the heatmap.</b> Rows = weekdays, columns = hours, brighter = more customers "
+    "for this business type. <b>Dark cells are outside the model's opening hours</b>: the model "
+    "keeps the business open from the first to the last hour of each day where demand reaches 0.3."
+)
+
+
+def _core_names(ranked) -> set:
+    """Stessa regola di compute_bep: prodotti con impact ≥ 0.90, altrimenti i primi 3."""
+    core = [p for p in ranked if p.impact >= 0.90] or ranked[:3]
+    return {p.name for p in core}
+
+
+PRODUCT_COLUMNS = [
+    Column("product", "Product", align="left", sub="core"),
+    Column("price", "Price", fmt=lambda v: f"${v:,.2f}", help="Market price in the game data."),
+    Column("cost", "Cost", fmt=lambda v: f"${v:,.2f}", help="Wholesale price."),
+    Column("margin", "Margin", fmt=lambda v: f"${v:,.2f}", bar=True, help="Price − cost, per unit."),
+    Column("prob", "Probability", fmt=lambda v: f"{v:.0%}",
+           help="Chance a customer of this business type buys it."),
+    Column("score", "Score", fmt=lambda v: f"${v:,.2f}", help="Margin × probability."),
+]
+ZONE_COLUMNS = [
+    Column("zone", "Zone", align="left"),
+    Column("traffic", "Avg traffic", fmt=lambda v: f"{v:,.0f}", bar=True,
+           help="Average traffic index of the buildings in the zone."),
+    Column("buildings", "Buildings", fmt=lambda v: f"{v:,.0f}", help="Buildings of this category in the zone."),
+    Column("match", "Product match", fmt=lambda v: f"{v:.0%}",
+           tone=lambda v: "ok" if v >= 0.8 else "warning" if v >= 0.5 else "critical"),
+]
+FURNITURE_COLUMNS = [
+    Column("name", "Furniture", align="left", sub="kind"),
+    Column("qty", "Qty"),
+    Column("price", "Price", fmt=lambda v: f"${v:,.0f}"),
+    Column("capacity", "Capacity", fmt=lambda v: f"{v:,.0f}/h" if v else "—",
+           help="Customers per hour one piece can serve."),
+    Column("total", "Total", fmt=lambda v: f"${v:,.0f}", bar=True),
+]
+
+
 def _render_planner(bundle) -> None:
-    categories = get_available_categories()
-    category = st.selectbox(
-        "Business Category",
-        options=categories,
-        key="hc_category"
-    )
+    from visualization.home_sections import profit_tone
 
-
-    business_type = get_business_tupes_for_category(category)
-
-    busi_type = st.selectbox(
-        "Business Type",
-        options= business_type,
-        key="hc_business_type"
-    )
-
+    c1, c2 = st.columns(2)
+    with c1:
+        category = st.selectbox("Business category", options=get_available_categories(), key="hc_category")
+    with c2:
+        busi_type = st.selectbox("Business type", options=get_business_tupes_for_category(category),
+                                 key="hc_business_type")
     internal_name = busi_type.replace(" ", "")
+
+    # --- prodotti ---
+    st.subheader("What to sell")
+    render_note(HOW_TO_READ_PRODUCTS)
     ranked = rank_products(internal_name)
+    core = _core_names(ranked)
+    render_open_table(PRODUCT_COLUMNS, [
+        {"product": p.name, "core": Raw(badge_html("core", "info")) if p.name in core else None,
+         "price": p.market_price, "cost": p.wholesale_price, "margin": p.margin,
+         "prob": p.probability, "score": p.score}
+        for p in ranked
+    ])
 
-    rows = []
-
-    for p in ranked:
-        rows.append({
-            "Product": p.name,
-            "Price": f"${p.market_price:.2f}",
-            "Cost":f"${p.wholesale_price:.2f}",
-            "Margin":f"${p.margin:.2f}",
-            "Sales Ratio": f"{p.sales_ratio:.2f}",
-            "Impact": f"{p.impact:.2f}",
-            "Probability": f"{p.probability:.0%}",
-            "Score": f"${p.score:.2f}"
-        })
-
-    st.dataframe(pd.DataFrame(rows))
-
-
-    st.caption("Score = Margin × Probability. Higher score = more profitable product to stock.")
-
-
-    st.header("Where to Open - Zone Ranking")
-    zone_rows = []
-
+    # --- zone ---
+    st.subheader("Where to open")
+    render_note(HOW_TO_READ_ZONES)
     zones = rank_zone(internal_name)
+    render_open_table(ZONE_COLUMNS, [
+        {"zone": z.name, "traffic": z.avg_traffic, "buildings": z.n_buildings, "match": z.product_match}
+        for z in zones
+    ])
 
-    for z in zones:
-        zone_rows.append({
-            "Zone": z.name,
-            "Avg Traffic": z.avg_traffic,
-            "Available Buildings": z.n_buildings,
-            "Product Match": f"{z.product_match:.0%}"
-        })
-
-    st.dataframe(pd.DataFrame(zone_rows), hide_index= True)
-
-
-    st.caption("Zones ranked by average foot traffic. More traffic = more potential customers.")
-
-
-
-    # SECTION 2
-
-    st.header(f"Break Even Analysis - ({busi_type})")
-
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        business_location = st.selectbox(
-            "Business Location",
-            options= [z.name for z in zones],
-            key= "hc_bl"
-        )
-
-    with col2:
+    # --- break even ---
+    st.subheader(f"Break-even — {busi_type}")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        business_location = st.selectbox("Location", options=[z.name for z in zones], key="hc_bl")
+    with c2:
         buildings = get_available_buildings(category)
         business_size = st.selectbox(
-            "Business Size",
-            options= buildings,
-            format_func= lambda x: f"{x} {get_building_capacity(category,x)} cust/h",
-            key= "hc_bk_size"
+            "Building size", options=buildings,
+            format_func=lambda x: f"{x} · {get_building_capacity(category, x)} customers/h",
+            key="hc_bk_size",
         )
-
-
-    daily_rent = st.number_input("Daily Rent ($)", min_value=0, max_value=10000, value=100, key="hc_rent")
-
+    with c3:
+        daily_rent = st.number_input("Daily rent ($)", min_value=0, max_value=10000, value=100, key="hc_rent")
 
     building_cap = get_building_capacity(category, business_size)
-    zone_traffic = next((z.avg_traffic for z in zones if z.name == business_location),0)
-
+    zone_traffic = next((z.avg_traffic for z in zones if z.name == business_location), 0)
     result = compute_bep(internal_name, building_cap, zone_traffic, daily_rent)
 
     if result is None:
-        st.error("The game's demand curve for this business type never reaches the model threshold: no theoretical opening hours.")
+        st.error("The game's demand curve for this business type never reaches the model threshold: "
+                 "no theoretical opening hours.")
     else:
-        col1, col2, col3, col4 = st.columns(4)
+        render_note(HOW_TO_READ_BEP)
+        profit = result.profit
+        st.html(kpi_row_html([
+            kpi_card_html("Customers / day", f"{result.daily_customers:,.0f}", compact=True,
+                          help=f"Traffic {zone_traffic:,.0f} × demand curve, capped at {building_cap}/h."),
+            kpi_card_html("Revenue / day", f"${result.revenue:,.0f}", compact=True,
+                          help="Customers × what a customer spends on the core products."),
+            kpi_card_html("Costs / day", f"${result.costs:,.0f}", compact=True,
+                          help=f"Rent + wages ({result.staff_hours} staff-hours a week at $22/h, per "
+                               "calendar day) + wholesale cost of the goods sold."),
+            kpi_card_html("Profit / day", f"${profit:,.0f}" if profit >= 0 else f"-${abs(profit):,.0f}",
+                          compact=True, tone=profit_tone(profit), help="Revenue − costs."),
+        ]))
+        days = len(result.open_hours)
+        st.html(kpi_row_html([
+            kpi_card_html("Opening hours (model)", f"{days} days · {result.weekly_hours} h/week",
+                          sub=f'<div class="ba-delta">{result.open_hour:02d}:00 → {result.close_hour:02d}:00 at most</div>',
+                          compact=True, help="Hours the model keeps the business open: see the heatmap below."),
+            kpi_card_html("Setup cost", f"${result.setup_cost:,.0f}", compact=True,
+                          help="Price of the furniture in the table below."),
+            kpi_card_html("Staff at the busiest hour", str(result.employees), compact=True,
+                          sub='<div class="ba-delta">' + _esc(" · ".join(
+                              f"{r.peak} {r.role}" for r in result.staff)) + "</div>",
+                          help=f"People on shift at the same time at peak. The model needs "
+                               f"{result.staff_hours} staff-hours a week: cash registers for the customers "
+                               "of each hour (+25% margin, at least 1), cleaning and security 1 per open hour."),
+            kpi_card_html("Break even", f"{result.break_even:,.0f} days" if profit > 0 else "never",
+                          compact=True, tone="ok" if profit > 0 else "critical",
+                          help="Days to earn back the setup cost. 'never' = the model makes a daily loss."),
+        ]))
 
-        with col1:
-            st.metric("Daily Customers", f"{result.daily_customers:.0f}")
-        with col2:
-            st.metric("Daily Revenue", f"${result.revenue:.2f}")
-        with col3:
-            st.metric("Daily Costs", f"${result.costs:.2f}")
-        with col4:
-            st.metric("Daily Profit", f"${result.profit:.2f}")
+        st.markdown("**Furniture the model needs**")
+        render_open_table(FURNITURE_COLUMNS, [
+            {"name": f.name, "kind": "workstation" if f.is_workstation else None, "qty": f.quantity,
+             "price": f.price, "capacity": f.capacity, "total": f.price * f.quantity}
+            for f in result.furniture
+        ])
+        st.caption("Minimum furniture to reach the building's capacity, plus the model's mandatory items "
+                   "(toilet, cleaning station, cash register, security locker).")
 
-
-
-        furniture_rows = [{"Name": f.name, "Qty": f.quantity, "Price": f"${f.price:.2f}", "Capacity": f"{f.capacity}/hr", "Total": f"${f.price * f.quantity}"} for f in result.furniture]
-
-
-        st.dataframe(pd.DataFrame(furniture_rows), hide_index= True)
-
-        st.caption("Minimum furniture needed to reach building capacity. Includes mandatory items (toilet, cleaning station, cash register, security locker).")
-
-        col5, col6, col7 = st.columns(3)
-        with col5:
-            st.metric("Setup Cost", f"${result.setup_cost:,.2f}")
-        with col6:
-            st.metric("Employees Needed", result.employees)
-        with col7:
-            st.metric("Break Even", f"{result.break_even:.0f} days" if result.profit > 0 else "never",
-                      help="Days to recover the setup cost. 'never' = the model makes a daily loss.")
-
-        st.caption("Estimated daily figures based on optimal furniture, location traffic, and demand curve. Break Even = days to recover the setup cost.")
-
-        fig = _demand_heatmap(internal_name, f"Demand Heatmap - Business Type: {busi_type}")
+        st.subheader("Demand and model hours")
+        render_note(HOW_TO_READ_PLAN_HEATMAP)
+        fig = _demand_heatmap(internal_name, f"Demand — {busi_type}", open_hours=result.open_hours)
         st.plotly_chart(fig, use_container_width=True)
-
-
-        st.caption("Brighter = higher demand. Use this to set your opening hours.")
 
 
     # SECTION 4 THEO VS EFFECTIVE

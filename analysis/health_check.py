@@ -1,7 +1,7 @@
 import math
 
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 from collections import defaultdict
 
@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from core import game_data
+from core.localization import display_name
 from core.game_data import get_demand_multipliers, get_furniture_for_business, get_products_for_business, get_item_by_name, get_all_business_types, _game_data
 from analysis.profit_loss import calculate_profit_loss
 from analysis.revenue_analyzer import extract_business_name_from_string
@@ -93,6 +94,7 @@ NEIGHBOURHOOD_NAMES = {
     'ba:neighborhood_hellskitchen': "Hell's Kitchen",
     'ba:neighborhood_lowermanhattan': 'Lower Manhattan',
     'ba:neighborhood_garmentdistrict': 'Garment District',
+    'ba:neighborhood_thehamptons': 'The Hamptons',
 }
 
 @dataclass 
@@ -127,7 +129,7 @@ def rank_zone(biz_name:str) -> List[ZoneInfo]:
     
         result.append(ZoneInfo(
             nid,
-            NEIGHBOURHOOD_NAMES.get(nid, f"Zone {nid}"),
+            NEIGHBOURHOOD_NAMES.get(nid) or display_name(nid, default=nid.split("_")[-1].title()),
             round(avg_traffic, 1),
             n_buildings,
             1.0
@@ -189,6 +191,55 @@ def model_open_hours(matrix: np.ndarray, threshold: float = 0.3) -> dict[int, se
     return result
 
 
+@dataclass(frozen=True)
+class ModelRole:
+    """Personale del modello per un ruolo (come staffing_fit, ma sui clienti del modello)."""
+    role: str               # "Customer Service", "Cleaning"…
+    kind: str               # "sales" | "appointment" | "presence"
+    stations: int
+    peak: int               # persone nella stessa ora, al massimo
+    weekly_hours: int       # ore-persona a settimana
+
+
+def model_staffing(biz_name: str, furniture_list, open_hours: dict, matrix: np.ndarray,
+                   traffic: float, effective_cap: float) -> list[ModelRole]:
+    """Persone necessarie ora per ora, per ruolo, con la stessa regola di staffing_fit:
+    vendita = postazioni per i clienti di quell'ora (+25%, almeno 1), presenza (pulizia,
+    sicurezza) = 1 per ora aperta. Contano solo le postazioni con una skill del tipo di
+    business (la cassa in uno studio legale non serve). Clienti dell'ora = come compute_bep."""
+    from analysis.business_fit import furniture_name_index
+    from analysis.staffing_fit import business_skills, hourly_need, role_kind
+    from core.game_data import get_item_by_id, skill_display
+
+    skills = business_skills(biz_name)
+    index = furniture_name_index()
+    throughputs: dict[str, list[int]] = {}
+    for f in furniture_list:
+        key = index.get(f.name)
+        item = get_item_by_id(key) if key else None
+        if not item or not item.get("assignable"):
+            continue
+        matched = [sk for sk in (item.get("suitableSkills") or []) if sk in skills]
+        if not matched:
+            continue
+        tp = int(item.get("addedCustomersPerHour") or 0)
+        throughputs.setdefault(skill_display(matched[0]), []).extend([tp] * int(f.quantity))
+
+    roles = []
+    for role, tps in throughputs.items():
+        peak = hours = 0
+        for day, hrs in open_hours.items():
+            for h in hrs:
+                need = hourly_need(tps, min(traffic * matrix[day - 1][h], effective_cap))
+                peak, hours = max(peak, need), hours + need
+        roles.append(ModelRole(role, role_kind(tps), len(tps), peak, hours))
+    order = {"sales": 0, "appointment": 1, "presence": 2}
+    return sorted(roles, key=lambda r: (order.get(r.kind, 9), r.role))
+
+
+REGISTER_THROUGHPUT = 20   # clienti/ora di una cassa (game data: CashRegister.addedCustomersPerHour)
+
+
 @dataclass
 class MiniFurniture:
     name: str
@@ -209,6 +260,8 @@ class BepResult:
     break_even: float
     daily_customers: float
     open_hours: dict              # giorno (1-7) → set di ore, da model_open_hours
+    staff: list = field(default_factory=list)   # list[ModelRole]: personale del modello per ruolo
+    staff_hours: int = 0                        # ore-persona/settimana (somma dei ruoli)
 
     @property
     def weekly_hours(self) -> int:
@@ -296,11 +349,17 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
     
         # --- Mandatory furniture ---
     existing_names = {f.name for f in furniture_list}
+    from analysis.staffing_fit import business_skills
+    sells_at_register = "ba:skill_customerservice" in business_skills(biz_name)
     for mf in MANDATORY_FURNITURE:
         if mf["name"] not in existing_names:
+            qty = 1
+            if mf["name"] == "Cash Register" and sells_at_register:
+                # una cassa serve REGISTER_THROUGHPUT clienti/ora: tante quante la capacità
+                qty = max(1, math.ceil(building_cap / REGISTER_THROUGHPUT))
             furniture_list.append(MiniFurniture(
                 name=mf["name"],
-                quantity=1,
+                quantity=qty,
                 price=mf["price"],
                 capacity=0,
                 is_workstation=False
@@ -309,12 +368,6 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
     
     
     
-        
-    n_employees = sum(f.quantity for f in furniture_list if f.is_workstation)
-    if n_employees == 0:
-        n_employees = 1
-        
-        
         
     # Ore del modello: dalla stessa matrice della heatmap, giorno per giorno
     # (prima: ore "profittevoli" su un giorno medio → 00-24 con prodotti cari).
@@ -342,7 +395,12 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
     daily_customers = weekly_customers / 7
     daily_revenue = daily_customers * rev_per_customer
     daily_wholesale = daily_customers * cost_per_customer
-    daily_wages = weekly_hours * hourly_wage * n_employees / 7
+    # Personale: ora per ora e per ruolo (casse per i clienti, pulizia/sicurezza 1 per ora).
+    # Prima: una persona per workstation, tutto il giorno → 1 sola persona nei negozi.
+    staff = model_staffing(biz_name, furniture_list, open_hours, matrix, traffic, effective_cap)
+    staff_hours = sum(r.weekly_hours for r in staff) or weekly_hours     # nessuna postazione → 1 persona
+    n_employees = sum(r.peak for r in staff) or 1
+    daily_wages = staff_hours * hourly_wage / 7
     daily_costs = daily_rent + daily_wages + daily_wholesale
     daily_profit = daily_revenue - daily_costs
     setup_cost = sum(f.price * f.quantity for f in furniture_list)
@@ -359,6 +417,8 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
         profit= daily_profit,
         break_even= break_even,
         open_hours= open_hours,
+        staff= staff,
+        staff_hours= staff_hours,
     )
     
     
@@ -408,7 +468,7 @@ def compute_performance(df, business_name:str, bep: BepResult, hourly_wage: floa
     
     n_days = len(daily_data)
     theo_revenue = bep.revenue
-    theo_wages = bep.employees * hourly_wage * bep.weekly_hours / 7
+    theo_wages = bep.staff_hours * hourly_wage / 7
     
     avg_daily_revenue = actual_revenue / n_days
     avg_daily_wages = actual_wages / n_days

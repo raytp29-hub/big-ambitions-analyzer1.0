@@ -453,7 +453,8 @@ def wage_shares(bep, actual: ActualMetrics, staffing=None) -> tuple[Optional[flo
         needed_hours = sum(r.hours_needed for r in staffing.roles)
         theo = needed_hours * actual.avg_hourly_wage / 7 / actual.revenue_per_day
     elif bep is not None and bep.revenue > 0:
-        theo = bep.employees * actual.avg_hourly_wage * bep.weekly_hours / 7 / bep.revenue
+        staff_hours = getattr(bep, "staff_hours", 0) or bep.employees * bep.weekly_hours
+        theo = staff_hours * actual.avg_hourly_wage / 7 / bep.revenue
     else:
         theo = None
     mine = wages_per_day / actual.revenue_per_day if actual.revenue_per_day else None

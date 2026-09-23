@@ -140,7 +140,7 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-row {{ display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }}
 .ba-gauge {{ position: relative; height: 8px; background: var(--ba-track); border-radius: 4px; margin: 12px 0 6px; }}
 .ba-gauge > i {{ position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--ba-tone); }}
-.ba-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }}
+.ba-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }}
 @media (max-width: 900px) {{ .ba-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .ba-kpi {{ display: flex; flex-direction: column; min-height: 178px; }}
 .ba-kpi .ba-label {{ color: var(--ba-muted); font-size: 0.85rem; display: flex; justify-content: space-between; }}

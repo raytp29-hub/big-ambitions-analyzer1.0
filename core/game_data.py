@@ -81,6 +81,14 @@ _game_data: Optional[dict] = None
 _items_by_id: Dict[int, dict] = {}
 _items_by_name: Dict[str, dict] = {}
 _product_to_furniture: Dict[int, List[dict]] = {}  # reverse showcase lookup
+
+# Oggetti di sviluppo del gioco (tag "ba:itemtag_dev"): non si comprano in gioco
+# (prezzo 0, es. WoodenSaladBar a 100 clienti/h). Non vanno mai proposti come arredo.
+DEV_ITEM_TAG = "ba:itemtag_dev"
+
+
+def is_dev_item(item: dict) -> bool:
+    return DEV_ITEM_TAG in (item.get("tags") or [])
 _building_sizes_by_id: Dict[int, dict] = {}
 
 
@@ -129,6 +137,8 @@ def _load_and_index():
 
     # Build reverse showcase lookup: product_id -> [furniture_items that can showcase it]
     for item in _game_data['items']:
+        if is_dev_item(item):
+            continue
         for showcased_id in item.get('itemsThatCanShowcase', []):
             if showcased_id not in _product_to_furniture:
                 _product_to_furniture[showcased_id] = []
@@ -525,7 +535,8 @@ def get_furniture_for_business(business_name: str) -> List[dict]:
     if bt is None:
         return []
 
-    seen = set()
+    # gli oggetti di sviluppo partono già "visti": nessun meccanismo li aggiunge
+    seen = {item['m_Name'] for item in _game_data['items'] if is_dev_item(item)}
     furniture = []
     biz_skills = set(bt.get('employeePrimarySkills', []))
 
