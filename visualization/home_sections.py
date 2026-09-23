@@ -14,8 +14,9 @@ from analysis.revenue_analyzer import (
     DELTA_WINDOW, daily_revenue_by_business, summarize_revenue,
 )
 from visualization.ui_components import (
-    CATEGORICAL, OTHER_COLOR, area_svg, columns_html, composition_html, day_strip_html,
-    delta_tone, kpi_card_html, kpi_row_html, render_revenue_cards, ui_theme,
+    CATEGORICAL, OTHER_COLOR, Column, Raw, area_svg, badge_html, columns_html,
+    composition_html, day_strip_html, delta_tone, kpi_card_html, kpi_row_html,
+    render_open_table, render_revenue_cards, ui_theme,
 )
 
 MAX_SERIES = 8   # oltre, i business più piccoli finiscono in "Other"
@@ -151,3 +152,156 @@ def render_revenue_section(df: pd.DataFrame, bundle=None) -> None:
     st.plotly_chart(revenue_lines_figure(daily, order, ui_theme(), log_y),
                     use_container_width=True, config={"displayModeBar": False})
     st.caption("Hover a day to compare every business on that day. Click a name in the legend to hide it.")
+
+
+# ============================================================================
+# PROFIT & LOSS
+# ============================================================================
+
+MARGIN_OK = 20.0        # margin % ≥ 20 → verde; 0-20 → giallo; < 0 → rosso
+
+
+def margin_tone(pct) -> str | None:
+    if pct is None or pd.isna(pct):
+        return None
+    return "ok" if pct >= MARGIN_OK else "warning" if pct >= 0 else "critical"
+
+
+def wage_share_tone(share) -> str | None:
+    """Stesse soglie della Health Check (business_fit.WAGE_SHARE_OK / _WARN)."""
+    from analysis.business_fit import WAGE_SHARE_OK, WAGE_SHARE_WARN
+    if share is None:
+        return None
+    return "ok" if share <= WAGE_SHARE_OK else "warning" if share <= WAGE_SHARE_WARN else "critical"
+
+
+def profit_tone(profit: float) -> str:
+    return "ok" if profit > 0 else "critical" if profit < 0 else "neutral"
+
+
+def _money(v) -> str:
+    return f"-${abs(v):,.0f}" if v < 0 else f"${v:,.0f}"
+
+
+def pl_rows(pl_df: pd.DataFrame) -> list[dict]:
+    """Righe per la tabella P&L, già con badge e sottotitoli."""
+    rows = []
+    for r in pl_df.sort_values("profit", ascending=False).itertuples():
+        share = r.wages / r.revenue if r.revenue > 0 else None
+        share_tone = wage_share_tone(share)
+        rows.append({
+            "business": r.business,
+            "revenue": r.revenue,
+            "wages": r.wages,
+            "wages_sub": (Raw(badge_html(f"{share:.0%} of revenue", share_tone))
+                          if share is not None else None),
+            "marketing": r.marketing,
+            "other_direct": r.health_insurance + r.hr_training,
+            "shared": r.total_shared_costs,
+            "shared_sub": (f"{_money(r.shared_revenue_based)} by revenue · "
+                           f"{_money(r.shared_equal_split)} equal"),
+            "profit": Raw(badge_html(_money(r.profit), profit_tone(r.profit))),
+            "margin": (Raw(badge_html(f"{r.margin_pct:.0f}%", margin_tone(r.margin_pct)))
+                       if r.revenue > 0 else None),
+        })
+    return rows
+
+
+PL_COLUMNS = [
+    Column("business", "Business", align="left"),
+    Column("revenue", "Revenue", fmt=_money, help="Sales income of this business."),
+    Column("wages", "Wages", fmt=_money, sub="wages_sub",
+           help="Wages + replacement wages of this business's employees. "
+                "Below: share of revenue (green ≤ 20%, yellow ≤ 35%, red above, as in the Health Check)."),
+    Column("marketing", "Marketing", fmt=_money, help="Marketing campaigns for this business."),
+    Column("other_direct", "Other direct", fmt=_money,
+           help="Health insurance + HR training of this business's employees."),
+    Column("shared", "Shared costs", fmt=_money, sub="shared_sub",
+           help="Costs not tied to one business in the ledger. Rent, loans, taxes and negative "
+                "bank interest are split in proportion to revenue; interior designer costs are "
+                "split equally."),
+    Column("profit", "Profit", help="Revenue minus all costs above."),
+    Column("margin", "Margin", help="Profit / revenue. Green ≥ 20%, yellow 0–20%, red below 0."),
+]
+
+
+def render_pl_section(df: pd.DataFrame) -> None:
+    from analysis.profit_loss import calculate_profit_loss
+    st.subheader("💰 Profit & Loss Analysis")
+    try:
+        pl_df = calculate_profit_loss(df)
+    except Exception as e:
+        st.error(f"❌ Error calculating P&L: {e}")
+        st.info("💡 This might happen if there are data inconsistencies. Check your data!")
+        return
+    if pl_df.empty:
+        st.info("No businesses found in the transactions.")
+        return
+    n_days = df["day"].nunique()
+    st.caption(f"Last {n_days} days of transactions, sorted by profit. "
+               "Hover a column name for what it contains.")
+    render_open_table(PL_COLUMNS, pl_rows(pl_df))
+
+
+# ============================================================================
+# ITEM-LEVEL MARGIN
+# ============================================================================
+
+ITEM_TOP = 25
+
+
+def item_rows(im: pd.DataFrame, show_business: bool) -> list[dict]:
+    rows = []
+    for r in im.itertuples():
+        pct = None if pd.isna(r.margin_pct) else r.margin_pct
+        rows.append({
+            "item": r.item_display,
+            "business": r.business_name if show_business else None,
+            "margin": float(r.margin),
+            "units": int(r.units_sold),
+            "revenue": float(r.revenue),
+            "avg_price": None if pd.isna(r.avg_price_per_unit) else float(r.avg_price_per_unit),
+            "margin_pct": Raw(badge_html(f"{pct:.0f}%", margin_tone(pct))) if pct is not None else None,
+        })
+    return rows
+
+
+ITEM_COLUMNS = [
+    Column("item", "Item", align="left", sub="business"),
+    Column("margin", "Margin $", fmt=_money, bar=True,
+           help="Revenue minus wholesale cost of the units sold. Bar = relative to the top item."),
+    Column("units", "Units sold", fmt=lambda v: f"{v:,}"),
+    Column("revenue", "Revenue", fmt=_money),
+    Column("avg_price", "Avg price", fmt=lambda v: f"${v:,.2f}", help="Revenue / units sold."),
+    Column("margin_pct", "Margin %", help="Margin / revenue. Green ≥ 20%, yellow 0–20%, red below 0."),
+]
+
+
+def render_item_margin_section(bundle) -> None:
+    from analysis.profit_loss import calculate_item_margin
+    st.subheader("Item-Level Margin")
+    sales = getattr(bundle, "item_sales", None) if bundle is not None else None
+    if sales is None or sales.empty:
+        st.info("Item-level margin requires an HSG save file. Load one from the sidebar to unlock this section.")
+        return
+
+    businesses = sorted(sales["business_name"].dropna().unique().tolist())
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        pick = st.selectbox("Business", ["All businesses"] + businesses, key="item_margin_business_filter")
+    with c2:
+        st.write("")   # allinea il toggle alla selectbox
+        show_all = st.toggle("Show all items", key="item_margin_show_all")
+    business = None if pick == "All businesses" else pick
+
+    im = calculate_item_margin(sales, business_filter=business)
+    if im.empty:
+        st.warning("No item sales for this selection.")
+        return
+    n_days = sales["day"].nunique()
+    shown = im if show_all else im.head(ITEM_TOP)
+    st.caption(
+        f"Last {n_days} days of sales stored in the save, sorted by margin $. "
+        + ("" if show_all or len(im) <= ITEM_TOP else f"Top {ITEM_TOP} of {len(im)} items.")
+    )
+    render_open_table(ITEM_COLUMNS, item_rows(shown, show_business=business is None))

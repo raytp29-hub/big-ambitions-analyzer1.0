@@ -23,7 +23,9 @@ from visualization.game_data_page import render_game_data_explorer
 from visualization.health_check_page import render_health_check_page
 from visualization.alerts_view import render_alert_summary
 from visualization.ui_components import inject_css
-from visualization.home_sections import render_overview, render_revenue_section
+from visualization.home_sections import (
+    render_item_margin_section, render_overview, render_pl_section, render_revenue_section,
+)
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
 from core.session_state_manager import init_global_session_state
@@ -684,131 +686,11 @@ else:
                 st.divider()
                 
                 # === P&L ANALYSIS ===
-                st.subheader("💰 Profit & Loss Analysis")
-                
                 with st.spinner('📊 Calculating P&L for each business...'):
-                    try:
-                        pl_df = calculate_profit_loss(df)
-                        
-                        # Ordina per profit (dal più alto al più basso)
-                        pl_df = pl_df.sort_values('profit', ascending=False)
-                        
-                        # Mostra tabella P&L
-                        st.write("**Complete P&L Statement:**")
-                        st.dataframe(
-                            pl_df.style.format({
-                                'revenue': '${:,.2f}',
-                                'shared_revenue_based': '${:,.2f}',
-                                'shared_equal_split': '${:,.2f}',
-                                'wages': '${:,.2f}',
-                                'marketing': '${:,.2f}',
-                                'health_insurance': '${:,.2f}',
-                                'hr_training': '${:,.2f}',
-                                'total_direct_costs': '${:,.2f}',
-                                'total_shared_costs': '${:,.2f}',
-                                'total_costs': '${:,.2f}',
-                                'profit': '${:,.2f}',
-                                'margin_pct': '{:.1f}%'
-                            }),
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                        
-                        # Highlight best performer
-                        best_business = pl_df.iloc[0]
-                        st.success(f"🏆 Most Profitable: **{best_business['business']}** - Profit: ${best_business['profit']:,.2f} ({best_business['margin_pct']:.1f}% margin)")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Error calculating P&L: {str(e)}")
-                        st.info("💡 This might happen if there are data inconsistencies. Check your data!")
+                    render_pl_section(df)
 
-                    # === ITEM-LEVEL MARGIN (Fase 5 di Track 1) ===
-                    # Vedi claude/feature-item-margin-plan.md
-                    st.subheader("Item-Level Margin")
-                    _bundle = st.session_state.get("bundle")
-                    if _bundle is None or _bundle.item_sales is None or _bundle.item_sales.empty:
-                        st.info(
-                            "Item-level margin requires an HSG save file. "
-                            "Load one from the sidebar to unlock this section."
-                        )
-                    else:
-                        _businesses = sorted(
-                            _bundle.item_sales["business_name"].dropna().unique().tolist()
-                        )
-                        _pick = st.selectbox(
-                            "Business",
-                            ["All businesses"] + _businesses,
-                            key="item_margin_business_filter",
-                        )
-                        _filter = None if _pick == "All businesses" else _pick
-
-                        _im = calculate_item_margin(_bundle.item_sales, business_filter=_filter)
-
-                        if _im.empty:
-                            st.warning("No item sales for this selection.")
-                        else:
-                            _show_business_col = _filter is None
-                            _display_cols = ["item_display"]
-                            if _show_business_col:
-                                _display_cols.append("business_name")
-                            _display_cols += [
-                                "units_sold", "revenue", "cost",
-                                "margin", "margin_pct", "avg_price_per_unit",
-                            ]
-
-                            _pretty = _im[_display_cols].rename(columns={
-                                "item_display":       "Item",
-                                "business_name":      "Business",
-                                "units_sold":         "Units sold",
-                                "revenue":            "Revenue",
-                                "cost":               "Cost",
-                                "margin":             "Margin $",
-                                "margin_pct":         "Margin %",
-                                "avg_price_per_unit": "Avg price / unit",
-                            })
-
-                            st.dataframe(
-                                _pretty.style.format({
-                                    "Units sold":       "{:,.0f}",
-                                    "Revenue":          "${:,.2f}",
-                                    "Cost":             "${:,.2f}",
-                                    "Margin $":         "${:,.2f}",
-                                    "Margin %":         lambda v: "—" if pd.isna(v) else f"{v:.1f}%",
-                                    "Avg price / unit": lambda v: "—" if pd.isna(v) else f"${v:,.2f}",
-                                }),
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-
-                            _top = _im.iloc[0]
-                            _top_pct = (
-                                f" ({_top['margin_pct']:.1f}% margin)"
-                                if pd.notna(_top['margin_pct']) else ""
-                            )
-                            st.success(
-                                f"🏆 Highest margin item: **{_top['item_display']}** in "
-                                f"**{_top['business_name']}** — "
-                                f"${_top['margin']:,.2f}{_top_pct}"
-                            )
-
-                            # Bar chart top-10 per margin $
-                            _top10 = _im.head(10).copy()
-                            _color = "business_name" if _show_business_col else None
-                            _fig_im = px.bar(
-                                _top10,
-                                x="item_display",
-                                y="margin",
-                                color=_color,
-                                title="Top 10 items by margin",
-                                labels={
-                                    "item_display":  "Item",
-                                    "margin":        "Margin ($)",
-                                    "business_name": "Business",
-                                },
-                            )
-                            _fig_im.update_yaxes(tickformat="$,.0f")
-                            _fig_im.update_layout(xaxis_tickangle=-30, height=420)
-                            st.plotly_chart(_fig_im, use_container_width=True)
+                    # === ITEM-LEVEL MARGIN ===
+                    render_item_margin_section(_bundle_home)
 
                                         # === HOURLY CUSTOMER TRAFFIC (Fase 3a di Track 1) ===
                     st.subheader("Hourly Customer Traffic")

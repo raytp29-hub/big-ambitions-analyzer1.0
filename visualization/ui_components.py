@@ -117,7 +117,7 @@ table.ba-table th {{ font: 0.7rem var(--ba-mono); letter-spacing: .09em; text-tr
 table.ba-table td {{ padding: 10px 12px; border: none; border-bottom: 1px solid var(--ba-line);
   white-space: nowrap; font-family: var(--ba-mono); font-size: 0.85rem; }}
 table.ba-table td.ba-text {{ font-family: inherit; font-size: 0.9rem; white-space: normal; }}
-table.ba-table td small {{ display: block; color: var(--ba-muted); font-family: sans-serif; font-size: 0.75rem; }}
+table.ba-table td small {{ display: block; color: var(--ba-muted); font-family: sans-serif; font-size: 0.75rem; margin-top: 2px; }}
 table.ba-table tr:hover td {{ background: var(--ba-hover); }}
 table.ba-table .ba-left {{ text-align: left; }}
 table.ba-table .ba-right {{ text-align: right; }}
@@ -223,6 +223,11 @@ def render_severity_card(severity: str, total: int, items: list[tuple[str, str]]
 # TABELLA "APERTA" (stile Peter: niente griglia, header mono, barre inline)
 # ============================================================================
 
+class Raw(str):
+    """HTML già pronto da mettere in una cella (es. un badge): non viene escapato.
+    Usarlo solo con HTML costruito da queste funzioni, mai con testo del save."""
+
+
 @dataclass(frozen=True)
 class Column:
     key: str                                            # colonna del dict/riga
@@ -237,16 +242,20 @@ class Column:
 
 def _cell(col: Column, row: dict, max_value: float) -> str:
     value = row.get(col.key)
-    text = escape(col.fmt(value)) if value is not None else "—"
+    if isinstance(value, Raw):
+        text = str(value)
+    else:
+        text = escape(col.fmt(value)) if value is not None else "—"
     if col.tone is not None and value is not None:
         tone = col.tone(value)
         if tone:
             text = badge_html(col.fmt(value), tone)
-    if col.bar and value is not None and max_value > 0:
+    if col.bar and isinstance(value, (int, float)) and max_value > 0:
         pct = max(0.0, min(1.0, float(value) / max_value)) * 100
         text = f'<span class="ba-inline"><span class="ba-bar"><i style="width:{pct:.1f}%"></i></span>{text}</span>'
     if col.sub and row.get(col.sub):
-        text += f"<small>{escape(str(row[col.sub]))}</small>"
+        sub = row[col.sub]
+        text += f"<small>{sub if isinstance(sub, Raw) else escape(str(sub))}</small>"
     classes = f"ba-{col.align}" + (" ba-text" if col.align == "left" else "")
     return f'<td class="{classes}">{text}</td>'
 
