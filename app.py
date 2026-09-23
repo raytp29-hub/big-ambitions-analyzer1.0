@@ -24,7 +24,8 @@ from visualization.health_check_page import render_health_check_page
 from visualization.alerts_view import render_alert_summary
 from visualization.ui_components import inject_css
 from visualization.home_sections import (
-    render_item_margin_section, render_overview, render_pl_section, render_revenue_section,
+    render_hourly_traffic_section, render_item_margin_section, render_overview,
+    render_pl_section, render_revenue_section,
 )
 from analysis.forecasting import ForecastingAnalyzer
 from analysis.marketing_analyzer import MarketingAnalyzer
@@ -687,83 +688,13 @@ else:
                 
                 # === P&L ANALYSIS ===
                 with st.spinner('📊 Calculating P&L for each business...'):
-                    render_pl_section(df)
+                    pl_df = render_pl_section(df)
 
                     # === ITEM-LEVEL MARGIN ===
                     render_item_margin_section(_bundle_home)
 
-                                        # === HOURLY CUSTOMER TRAFFIC (Fase 3a di Track 1) ===
-                    st.subheader("Hourly Customer Traffic")
-                    _bundle_hr = st.session_state.get("bundle")
-                    if _bundle_hr is None or _bundle_hr.hour_reports is None or _bundle_hr.hour_reports.empty:
-                        st.info(
-                            "Hourly customer traffic requires an HSG save file. "
-                            "Load one from the sidebar to unlock this section."
-                        )
-                    else:
-                        _hr_df = _bundle_hr.hour_reports
-                        _hr_businesses = sorted(_hr_df["business_name"].dropna().unique().tolist())
-                        _hr_pick = st.selectbox(
-                            "Business",
-                            ["All businesses"] + _hr_businesses,
-                            key="hourly_traffic_business_filter",
-                        )
-                        _hr_filter = None if _hr_pick == "All businesses" else _hr_pick
-
-                        _hr_agg = calculate_hourly_traffic(_hr_df, business_filter=_hr_filter)
-
-                        if _hr_agg.empty:
-                            st.warning("No hourly traffic data for this selection.")
-                        else:
-                            # Metric tiles
-                            m1, m2, m3 = st.columns(3)
-                            _peak_row = _hr_agg.loc[_hr_agg["avg_customers"].idxmax()]
-                            m1.metric(
-                                "Peak hour",
-                                f"{int(_peak_row['hour']):02d}:00",
-                                f"{_peak_row['avg_customers']:.1f} avg customers",
-                            )
-                            m2.metric(
-                                "Avg customers / hour",
-                                f"{_hr_agg['avg_customers'].mean():.1f}",
-                            )
-                            _peak_biz = (
-                                _hr_agg.groupby("business_name", as_index=False)["total_customers"]
-                                .sum()
-                                .sort_values("total_customers", ascending=False)
-                                .iloc[0]
-                            )
-                            m3.metric(
-                                "Busiest business",
-                                _peak_biz["business_name"],
-                                f"{int(_peak_biz['total_customers']):,} total customers",
-                            )
-
-                            # Line chart
-                            _show_color = (_hr_filter is None)
-                            _fig_hr = px.line(
-                                _hr_agg,
-                                x="hour",
-                                y="avg_customers",
-                                color="business_name" if _show_color else None,
-                                markers=True,
-                                title="Average customers per hour",
-                                labels={
-                                    "hour":          "Hour of day",
-                                    "avg_customers": "Avg customers",
-                                    "business_name": "Business",
-                                },
-                            )
-                            _fig_hr.update_xaxes(
-                                tickmode="linear",
-                                tick0=0,
-                                dtick=1,
-                                range=[-0.5, 23.5],
-                            )
-                            _fig_hr.update_layout(height=420)
-                            st.plotly_chart(_fig_hr, use_container_width=True)
-
-
+                    # === HOURLY CUSTOMER TRAFFIC ===
+                    render_hourly_traffic_section(_bundle_home)
 
                     # === TEMPORAL ANALYSIS ===
                     st.header("📈 Temporal Analysis")
@@ -793,114 +724,115 @@ else:
                     
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # === CHARTS SECTION ===
-                st.subheader("📊 Detailed Charts")
+                # === CHARTS SECTION === (servono i dati del P&L)
+                if pl_df is not None:
+                    st.subheader("📊 Detailed Charts")
                 
-                fig1 = px.bar(
-                    pl_df,
-                    x="business",
-                    y="profit", 
-                    title="Profit by Business",
-                    color="profit",
-                    color_continuous_scale=["red", "yellow", "green"]   
-                )
+                    fig1 = px.bar(
+                        pl_df,
+                        x="business",
+                        y="profit", 
+                        title="Profit by Business",
+                        color="profit",
+                        color_continuous_scale=["red", "yellow", "green"]   
+                    )
                 
-                fig2 = px.bar(
-                    pl_df,
-                    x="business",
-                    y="margin_pct",
-                    title="Profit Margin %"
-                )
+                    fig2 = px.bar(
+                        pl_df,
+                        x="business",
+                        y="margin_pct",
+                        title="Profit Margin %"
+                    )
                 
-                fig3 = px.bar(
-                    pl_df,
-                    x="business",
-                    y=["wages", "shared_revenue_based", "marketing", "health_insurance", "hr_training"],
-                    barmode="stack",
-                    title="Cost Breakdown",
-                    labels={"value": "Amount ($)", "variable": "Category"},
-                    color_discrete_map={
-                        "wages": "#e7f316",
-                        "shared_revenue_based": "#bc2210",
-                        "marketing": "#225ae6",
-                        "health_insurance": "#0cc05a",
-                        "hr_training": "#14bcc2"
-                    }
-                )
+                    fig3 = px.bar(
+                        pl_df,
+                        x="business",
+                        y=["wages", "shared_revenue_based", "marketing", "health_insurance", "hr_training"],
+                        barmode="stack",
+                        title="Cost Breakdown",
+                        labels={"value": "Amount ($)", "variable": "Category"},
+                        color_discrete_map={
+                            "wages": "#e7f316",
+                            "shared_revenue_based": "#bc2210",
+                            "marketing": "#225ae6",
+                            "health_insurance": "#0cc05a",
+                            "hr_training": "#14bcc2"
+                        }
+                    )
                 
-                fig3.update_yaxes(tickformat='$,.0f')
-                fig3.update_layout(height=500)
+                    fig3.update_yaxes(tickformat='$,.0f')
+                    fig3.update_layout(height=500)
                 
-                # === WATERFALL CHART ===
-                fig5 = go.Figure()
+                    # === WATERFALL CHART ===
+                    fig5 = go.Figure()
                 
-                for i, business_row in pl_df.iterrows():
-                    x_list = ["Revenue", "Direct Costs", "Shared Costs", "Profit"]
-                    y_list = [
-                        business_row["revenue"],
-                        -business_row["total_direct_costs"],
-                        -business_row["total_shared_costs"],
-                        business_row["profit"]
-                    ]
-                    
-                    measure = ["relative", "relative", "relative", "total"]
-                    
-                    fig5.add_trace(go.Waterfall(
-                        x=x_list,
-                        y=y_list,
-                        measure=measure,
-                        text=y_list,
-                        textposition="outside",
-                        texttemplate='$%{y:,.0f}',
-                        visible=(i==0),
-                        name=business_row["business"],
-                        increasing={"marker": {"color": "#2ecc71"}},    
-                        decreasing={"marker": {"color": "#e74c3c"}},      
-                        totals={"marker": {"color": "#3498db"}}
-                    ))
-                
-                buttons = []
-                
-                for i in range(len(pl_df)):
-                    business_name = pl_df.iloc[i]["business"]
-                    
-                    visible = [False] * len(pl_df)
-                    visible[i] = True
-                    
-                    buttons.append(dict(
-                        label=business_name,
-                        method="update",
-                        args=[{"visible": visible},
-                            {"title.text": f"<b>P&L Waterfall - {business_name}</b>"}
+                    for i, business_row in pl_df.iterrows():
+                        x_list = ["Revenue", "Direct Costs", "Shared Costs", "Profit"]
+                        y_list = [
+                            business_row["revenue"],
+                            -business_row["total_direct_costs"],
+                            -business_row["total_shared_costs"],
+                            business_row["profit"]
                         ]
-                    ))
-                
-                fig5.update_layout(
-                    title=f"P&L Waterfall - {pl_df.iloc[0]['business']}",
-                    height=500,
-                    updatemenus=[dict(
-                        buttons=buttons,
-                        direction="down",
-                        showactive=True,
-                        x=0.5,
-                        y=1.2,
-                        xanchor="left",
-                        yanchor="top"
-                    )]
-                )
-                
-                # Display charts in columns
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Profit")
-                    st.plotly_chart(fig1, use_container_width=True)
-                    st.plotly_chart(fig3, use_container_width=True)
                     
-                with col2:
-                    st.subheader("Margin %")
-                    st.plotly_chart(fig2, use_container_width=True)
-                    st.plotly_chart(fig5, use_container_width=True)
+                        measure = ["relative", "relative", "relative", "total"]
+                    
+                        fig5.add_trace(go.Waterfall(
+                            x=x_list,
+                            y=y_list,
+                            measure=measure,
+                            text=y_list,
+                            textposition="outside",
+                            texttemplate='$%{y:,.0f}',
+                            visible=(i==0),
+                            name=business_row["business"],
+                            increasing={"marker": {"color": "#2ecc71"}},    
+                            decreasing={"marker": {"color": "#e74c3c"}},      
+                            totals={"marker": {"color": "#3498db"}}
+                        ))
+                
+                    buttons = []
+                
+                    for i in range(len(pl_df)):
+                        business_name = pl_df.iloc[i]["business"]
+                    
+                        visible = [False] * len(pl_df)
+                        visible[i] = True
+                    
+                        buttons.append(dict(
+                            label=business_name,
+                            method="update",
+                            args=[{"visible": visible},
+                                {"title.text": f"<b>P&L Waterfall - {business_name}</b>"}
+                            ]
+                        ))
+                
+                    fig5.update_layout(
+                        title=f"P&L Waterfall - {pl_df.iloc[0]['business']}",
+                        height=500,
+                        updatemenus=[dict(
+                            buttons=buttons,
+                            direction="down",
+                            showactive=True,
+                            x=0.5,
+                            y=1.2,
+                            xanchor="left",
+                            yanchor="top"
+                        )]
+                    )
+                
+                    # Display charts in columns
+                    col1, col2 = st.columns(2)
+                
+                    with col1:
+                        st.subheader("Profit")
+                        st.plotly_chart(fig1, use_container_width=True)
+                        st.plotly_chart(fig3, use_container_width=True)
+                    
+                    with col2:
+                        st.subheader("Margin %")
+                        st.plotly_chart(fig2, use_container_width=True)
+                        st.plotly_chart(fig5, use_container_width=True)
                 
             
         else:

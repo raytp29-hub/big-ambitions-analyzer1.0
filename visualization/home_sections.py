@@ -16,7 +16,7 @@ from analysis.revenue_analyzer import (
 from visualization.ui_components import (
     CATEGORICAL, OTHER_COLOR, Column, Raw, area_svg, badge_html, columns_html,
     composition_html, day_strip_html, delta_tone, kpi_card_html, kpi_row_html,
-    render_open_table, render_revenue_cards, ui_theme,
+    hour_columns_html, render_note, render_open_table, render_revenue_cards, ui_theme,
 )
 
 MAX_SERIES = 8   # oltre, i business più piccoli finiscono in "Other"
@@ -96,22 +96,42 @@ def _fold_other(daily: pd.DataFrame, order: list[str]) -> tuple[pd.DataFrame, li
     return folded, keep + ["Other"]
 
 
-def revenue_lines_figure(daily: pd.DataFrame, order: list[str], theme: str, log_y: bool = False) -> go.Figure:
-    """Una linea per business. Colore legato al business (ordine alfabetico dei
-    business mostrati), non alla posizione in classifica: se cambia il totale
-    il colore resta lo stesso."""
-    daily, shown = _fold_other(daily, order)
+def business_colors(names, theme: str) -> dict[str, str]:
+    """Colore per business, uguale in tutti i grafici della Home: ordine alfabetico
+    sull'elenco completo dei business, non sulla classifica (se cambia il totale,
+    o un filtro toglie un business, gli altri tengono il loro colore).
+    Oltre gli 8 slot della palette → colore di "Other"."""
     palette = CATEGORICAL[theme]
-    named = sorted(b for b in shown if b != "Other")
-    color = {b: palette[i] for i, b in enumerate(named)}
-    color["Other"] = OTHER_COLOR[theme]
+    ordered = sorted({str(n) for n in names if n and n != "Other"})
+    colors = {b: (palette[i] if i < len(palette) else OTHER_COLOR[theme]) for i, b in enumerate(ordered)}
+    colors["Other"] = OTHER_COLOR[theme]
+    return colors
+
+
+def home_businesses(bundle, daily: pd.DataFrame | None = None) -> list[str]:
+    """Elenco master dei business per i colori: chi vende (revenue > 0) + chi ha clienti."""
+    names = set()
+    if daily is not None and not daily.empty:
+        tot = daily.groupby("business")["revenue"].sum()
+        names |= set(tot[tot > 0].index)
+    hr = getattr(bundle, "hour_reports", None) if bundle is not None else None
+    if hr is not None and not hr.empty:
+        names |= set(hr["business_name"].dropna().unique())
+    return sorted(names)
+
+
+def revenue_lines_figure(daily: pd.DataFrame, order: list[str], theme: str, log_y: bool = False,
+                         colors: dict | None = None) -> go.Figure:
+    """Una linea per business, colori da business_colors (fissi per business)."""
+    daily, shown = _fold_other(daily, order)
+    color = colors or business_colors(shown, theme)
 
     fig = go.Figure()
     for business in shown:                       # legenda nello stesso ordine delle card
         g = daily[daily["business"] == business].sort_values("day")
         fig.add_trace(go.Scatter(
             x=g["day"], y=g["revenue"], name=business, mode="lines",
-            line=dict(color=color[business], width=2),
+            line=dict(color=color.get(business, OTHER_COLOR[theme]), width=2),
             hovertemplate="%{y:$,.0f}<extra>" + business.replace("<", "&lt;") + "</extra>",
         ))
     fig.update_layout(
@@ -149,7 +169,9 @@ def render_revenue_section(df: pd.DataFrame, bundle=None) -> None:
         help="Useful when one business earns 100× another: small businesses stop looking flat.",
     )
     order = [r.business for r in rows]
-    st.plotly_chart(revenue_lines_figure(daily, order, ui_theme(), log_y),
+    theme = ui_theme()
+    colors = business_colors(home_businesses(bundle, daily), theme)
+    st.plotly_chart(revenue_lines_figure(daily, order, theme, log_y, colors),
                     use_container_width=True, config={"displayModeBar": False})
     st.caption("Hover a day to compare every business on that day. Click a name in the legend to hide it.")
 
@@ -225,7 +247,9 @@ PL_COLUMNS = [
 ]
 
 
-def render_pl_section(df: pd.DataFrame) -> None:
+def render_pl_section(df: pd.DataFrame) -> pd.DataFrame | None:
+    """Mostra la tabella P&L e restituisce il DataFrame (ordinato per profit),
+    che app.py riusa per i Detailed Charts. None se non calcolabile o vuoto."""
     from analysis.profit_loss import calculate_profit_loss
     st.subheader("💰 Profit & Loss Analysis")
     try:
@@ -233,14 +257,15 @@ def render_pl_section(df: pd.DataFrame) -> None:
     except Exception as e:
         st.error(f"❌ Error calculating P&L: {e}")
         st.info("💡 This might happen if there are data inconsistencies. Check your data!")
-        return
+        return None
     if pl_df.empty:
         st.info("No businesses found in the transactions.")
-        return
+        return None
     n_days = df["day"].nunique()
     st.caption(f"Last {n_days} days of transactions, sorted by profit. "
                "Hover a column name for what it contains.")
     render_open_table(PL_COLUMNS, pl_rows(pl_df))
+    return pl_df.sort_values("profit", ascending=False).reset_index(drop=True)
 
 
 # ============================================================================
@@ -305,3 +330,115 @@ def render_item_margin_section(bundle) -> None:
         + ("" if show_all or len(im) <= ITEM_TOP else f"Top {ITEM_TOP} of {len(im)} items.")
     )
     render_open_table(ITEM_COLUMNS, item_rows(shown, show_business=business is None))
+
+
+# ============================================================================
+# HOURLY CUSTOMER TRAFFIC
+# ============================================================================
+
+_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def hourly_profile(agg: pd.DataFrame) -> pd.Series:
+    """Clienti medi per ora (0-23) sommati sui business selezionati: il 'giorno tipo'."""
+    return agg.groupby("hour")["avg_customers"].sum().reindex(range(24), fill_value=0.0)
+
+
+def traffic_kpis(hr: pd.DataFrame, agg: pd.DataFrame, single: bool,
+                 colors: dict | None = None) -> list[str]:
+    """Le 3 card sopra il grafico."""
+    profile = hourly_profile(agg)
+    peak = int(profile.idxmax())
+    c1 = kpi_card_html(
+        "⏰ Peak hour", f"{peak:02d}:00",
+        sub=f'<div class="ba-delta">≈ {profile[peak]:,.0f} customers in that hour</div>',
+        graphic=hour_columns_html(profile.tolist(), highlight=peak),
+        help="Hour with the most customers on an average day (all selected businesses together). "
+             "Columns = the 24 hours, the peak highlighted.",
+        tone="info",
+    )
+
+    per_day = hr.groupby("day")["customers"].sum()
+    per_open_hour = agg["avg_customers"].mean()
+    c2 = kpi_card_html(
+        "👥 Avg customers / hour", f"{per_open_hour:,.1f}",
+        sub=f'<div class="ba-delta">≈ {per_day.mean():,.0f} customers per day</div>',
+        graphic=area_svg(per_day.tolist()),
+        help="Average customers in an open hour, per business. Area = total customers per game day.",
+        tone="info",
+    )
+
+    if single:
+        wd = hr.assign(wd=(hr["day"] - 1) % 7).groupby(["wd", "day"])["customers"].sum()
+        by_wd = wd.groupby("wd").mean().reindex(range(7), fill_value=0.0)
+        best = int(by_wd.idxmax())
+        c3 = kpi_card_html(
+            "📅 Busiest weekday", _WEEKDAYS[best],
+            sub=f'<div class="ba-delta">≈ {by_wd[best]:,.0f} customers</div>',
+            graphic=columns_html(by_wd.round().astype(int).tolist(), _WEEKDAYS),
+            help="Average customers per weekday. Columns = Monday → Sunday.",
+            tone="info",
+        )
+    else:
+        totals = hr.groupby("business_name")["customers"].sum().sort_values(ascending=False)
+        c3 = kpi_card_html(
+            "🏪 Busiest business", str(totals.index[0]),
+            sub=f'<div class="ba-delta">{int(totals.iloc[0]):,} customers in total</div>',
+            graphic=composition_html(list(totals.items()), colors=colors),
+            help="Share of all customers per business (the 4 busiest, the rest as Other).",
+        )
+    return [c1, c2, c3]
+
+
+def hourly_figure(agg: pd.DataFrame, colors: dict, theme: str) -> go.Figure:
+    fig = go.Figure()
+    for business, g in agg.groupby("business_name", sort=False):
+        fig.add_trace(go.Scatter(
+            x=g["hour"], y=g["avg_customers"], name=str(business), mode="lines+markers",
+            line=dict(color=colors.get(business, OTHER_COLOR[theme]), width=2),
+            marker=dict(size=6),
+            hovertemplate="%{y:,.1f} customers<extra>" + str(business).replace("<", "&lt;") + "</extra>",
+        ))
+    fig.update_layout(
+        height=400, margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        xaxis_title="Hour of day", yaxis_title="Avg customers",
+    )
+    fig.update_xaxes(tickmode="array", tickvals=list(range(0, 24, 2)),
+                     ticktext=[f"{h:02d}:00" for h in range(0, 24, 2)], range=[-0.5, 23.5])
+    return fig
+
+
+HOW_TO_READ_TRAFFIC = (
+    "<b>How to read this chart.</b> Each line is one business. Across: the hours of the day. "
+    "Up: how many customers walked in during that hour, on average over the days it was open "
+    "at that hour. A gap in a line = the business was closed at that hour. "
+    "<b>Use it to</b> open when your line would still be high, and put more staff on the "
+    "peak hours (compare with the staffing in the Business Health Check)."
+)
+
+
+def render_hourly_traffic_section(bundle) -> None:
+    from analysis.temporal_analyzer import calculate_hourly_traffic
+    st.subheader("Hourly Customer Traffic")
+    hr = getattr(bundle, "hour_reports", None) if bundle is not None else None
+    if hr is None or hr.empty:
+        st.info("Hourly customer traffic requires an HSG save file. Load one from the sidebar to unlock this section.")
+        return
+
+    businesses = sorted(hr["business_name"].dropna().unique().tolist())
+    pick = st.selectbox("Business", ["All businesses"] + businesses, key="hourly_traffic_business_filter")
+    business = None if pick == "All businesses" else pick
+    sel = hr if business is None else hr[hr["business_name"] == business]
+    agg = calculate_hourly_traffic(hr, business_filter=business)
+    if agg.empty:
+        st.warning("No hourly traffic data for this selection.")
+        return
+
+    st.caption(f"Last {hr['day'].nunique()} days of hourly reports stored in the save.")
+    theme = ui_theme()
+    colors = business_colors(home_businesses(bundle), theme)
+    st.html(kpi_row_html(traffic_kpis(sel, agg, single=business is not None, colors=colors)))
+    render_note(HOW_TO_READ_TRAFFIC)
+    st.plotly_chart(hourly_figure(agg, colors, theme), use_container_width=True,
+                    config={"displayModeBar": False})

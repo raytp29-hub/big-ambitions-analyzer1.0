@@ -145,7 +145,8 @@ table.ba-table .ba-right {{ text-align: right; }}
 @media (max-width: 900px) {{ .ba-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .ba-kpi {{ display: flex; flex-direction: column; min-height: 178px; }}
 .ba-kpi .ba-label {{ color: var(--ba-muted); font-size: 0.85rem; display: flex; justify-content: space-between; }}
-.ba-kpi .ba-q {{ cursor: help; opacity: .7; }}
+.ba-kpi .ba-q {{ cursor: help; color: var(--ba-muted); display: inline-flex; align-items: center; }}
+.ba-kpi .ba-q:hover {{ color: var(--ba-ink); }}
 .ba-kpi .ba-graphic {{ margin-top: auto; padding-top: 10px; }}
 .ba-cols {{ display: flex; align-items: flex-end; gap: 3px; height: 44px; }}
 .ba-cols > i {{ flex: 1; background: var(--ba-c1); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }}
@@ -161,6 +162,10 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-legend > span::before {{ content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
   margin-right: 4px; background: var(--ba-sw); vertical-align: -1px; }}
 .ba-area {{ display: block; width: 100%; height: 44px; }}
+.ba-kpis.ba-3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+.ba-cols > i.ba-hl {{ background: var(--ba-warning); opacity: 1; }}
+.ba-note {{ border-left: 3px solid var(--ba-info); background: color-mix(in srgb, var(--ba-info) 10%, transparent);
+  padding: 10px 14px; border-radius: 4px; font-size: 0.88rem; line-height: 1.45; margin: 12px 0; }}
 .ba-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }}
 .ba-delta {{ font: 0.8rem var(--ba-mono); color: var(--ba-muted); }}
 .ba-delta b {{ color: var(--ba-tone); font-weight: 600; }}
@@ -446,11 +451,18 @@ def render_revenue_cards(rows: list, window: int = 7) -> None:
 _WEEKDAY = "MTWTFSS"   # giorno di gioco → (day - 1) % 7, 0 = lunedì (vedi staffing_fit)
 
 
+# Icona "info" disegnata in SVG: il carattere ⓘ a 13px usciva sgranato su Windows.
+_INFO_ICON = ('<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">'
+              '<circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.3"/>'
+              '<line x1="8" y1="7.2" x2="8" y2="11.2" stroke="currentColor" stroke-width="1.5" '
+              'stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>')
+
+
 def kpi_card_html(label: str, value: str, graphic: str = "", sub: str = "",
                   help: str = "", tone: str = "neutral") -> str:
     """Card KPI: etichetta (+ ⓘ con spiegazione al passaggio del mouse), valore,
     riga opzionale sotto (`sub`, HTML già pronto), grafico ancorato in basso."""
-    q = f'<span class="ba-q" title="{escape(help)}">ⓘ</span>' if help else ""
+    q = f'<span class="ba-q" title="{escape(help)}">{_INFO_ICON}</span>' if help else ""
     return (
         f'<div class="ba-card ba-kpi" {_tone(tone)}>'
         f'<div class="ba-label"><span>{escape(label)}</span>{q}</div>'
@@ -460,7 +472,9 @@ def kpi_card_html(label: str, value: str, graphic: str = "", sub: str = "",
 
 
 def kpi_row_html(cards: list[str]) -> str:
-    return f'<div class="ba-kpis">{"".join(cards)}</div>'
+    """Riga di card della stessa altezza: 4 colonne, o 3 se le card sono 3."""
+    extra = " ba-3" if len(cards) == 3 else ""
+    return f'<div class="ba-kpis{extra}">{"".join(cards)}</div>'
 
 
 def columns_html(values: list, labels: list) -> str:
@@ -484,8 +498,10 @@ def day_strip_html(days: list[int]) -> str:
     return f'<div class="ba-days">{"".join(cells)}</div>'
 
 
-def composition_html(parts: list[tuple[str, float]], top: int = 4) -> str:
+def composition_html(parts: list[tuple[str, float]], top: int = 4,
+                     colors: Optional[dict] = None) -> str:
     """Barra 100% impilata: le prime `top` voci con i colori categoriali, il resto 'Other'.
+    `colors` (nome → colore) per usare lo stesso colore dell'entità negli altri grafici.
     Legenda sempre presente (l'identità non è affidata al solo colore)."""
     total = sum(v for _, v in parts) or 1
     shown = parts[:top]
@@ -494,7 +510,12 @@ def composition_html(parts: list[tuple[str, float]], top: int = 4) -> str:
         shown = shown + [("Other", rest)]
     segs, legend = [], []
     for i, (name, v) in enumerate(shown):
-        color = "var(--ba-other)" if name == "Other" else f"var(--ba-c{i + 1})"
+        if name == "Other":
+            color = "var(--ba-other)"
+        elif colors and name in colors:
+            color = colors[name]
+        else:
+            color = f"var(--ba-c{i + 1})"
         pct = v / total
         segs.append(f'<i style="width:{pct * 100:.1f}%;background:{color}" title="{escape(name)}: {pct:.0%}"></i>')
         legend.append(f'<span style="--ba-sw:{color}">{escape(name)} {pct:.0%}</span>')
@@ -515,3 +536,25 @@ def area_svg(values: list, width: int = 100, height: int = 40) -> str:
             f'<polygon points="{area}" fill="var(--ba-tone)" fill-opacity="0.15"/>'
             f'<polyline points="{line}" fill="none" stroke="var(--ba-tone)" stroke-width="1.6" '
             f'vector-effect="non-scaling-stroke"/></svg>')
+
+
+def hour_columns_html(values: list, highlight: Optional[int] = None) -> str:
+    """24 colonne (una per ora), l'ora `highlight` in evidenza; hover = ora + valore."""
+    top = max(values, default=0) or 1
+    hl = ' class="ba-hl"'
+    bars = "".join(
+        f'<i{hl if h == highlight else ""} '
+        f'style="height:{max(v / top, 0) * 100:.0f}%" title="{h:02d}:00 · {v:,.1f}"></i>'
+        for h, v in enumerate(values)
+    )
+    return f'<div class="ba-cols">{bars}</div>'
+
+
+def note_html(html_text: str) -> str:
+    """Riquadro informativo (bordo blu a sinistra). `html_text` è HTML scritto nel codice,
+    non testo del save: non viene escapato (così può avere <b>)."""
+    return f'<div class="ba-note">{html_text}</div>'
+
+
+def render_note(html_text: str) -> None:
+    st.html(note_html(html_text))
