@@ -14,7 +14,11 @@ from analysis.business_alerts import (
     SEVERITY_ORDER, build_context, demand_status, run_all_checks, summarize,
 )
 
-from visualization.ui_components import render_severity_card
+from core.localization import display_name
+from analysis.business_alerts import NON_CUSTOMER_TYPES, _street_label
+from visualization.ui_components import (
+    business_card_html, business_grid_html, demand_icons_html, render_severity_card,
+)
 
 SEVERITY_ICON = {"critical": "🔴", "warning": "🟠", "info": "🔵"}
 
@@ -71,8 +75,74 @@ def render_alert_summary(bundle, on_open: Optional[Callable[[], None]] = None) -
         st.button("Open Business Health Check →", on_click=on_open, key="home_open_health")
 
 
+# Alert della supply chain: non stanno nella griglia dei business
+# (avranno una pagina dedicata alla supply chain).
+SUPPLY_CODES = frozenset({"IMPORT_PAUSED"})
+STATUS_LABEL = {"critical": "critical", "warning": "warning", "info": "info", "ok": "healthy"}
+
+
+def business_groups(bundle, alerts) -> list[dict]:
+    """Un gruppo per business del save (anche quelli senza problemi) + i gruppi di alert
+    non legati a un business del save (es. import). Ordine: gravità peggiore, poi numero
+    di problemi, poi nome."""
+    snap = bundle.snapshot
+    ctx = build_context(snap)
+    status = demand_status(snap, ctx)
+    groups: dict[str, dict] = {}
+    for b in snap.businesses.itertuples():
+        kind = display_name(b.business_type) if b.business_type else ""
+        if b.business_type == "ba:businesstype_empty":
+            kind = "Empty building"
+        demands = status[status["address"] == b.address]
+        name = ctx.names.get(b.address) or b.business_name or _street_label(b.address)
+        street = _street_label(b.address)
+        groups[b.address] = {
+            "key": b.address,
+            "name": name,
+            "subtitle": " · ".join(x for x in (kind, street if street != name else "") if x),
+            "alerts": [],
+            "demands": [(r.demand_key, r.demand, bool(r.fulfilled)) for r in demands.itertuples()],
+            "customer": b.business_type not in NON_CUSTOMER_TYPES,
+        }
+    for al in alerts:
+        if al.code in SUPPLY_CODES:
+            continue
+        key = al.address if al.address in groups else f"name:{al.business}"
+        if key not in groups:
+            groups[key] = {"key": key, "name": al.business, "subtitle": "", "alerts": [],
+                           "demands": [], "customer": False}
+        groups[key]["alerts"].append(al)
+
+    def worst(g):
+        return min((SEVERITY_ORDER[x.severity] for x in g["alerts"]), default=len(SEVERITY_ORDER))
+
+    return sorted(groups.values(), key=lambda g: (worst(g), -len(g["alerts"]), g["name"].lower()))
+
+
+def _tone_of(group) -> str:
+    if not group["alerts"]:
+        return "ok"
+    return min(group["alerts"], key=lambda x: SEVERITY_ORDER[x.severity]).severity
+
+
+def business_card(group) -> str:
+    tone = _tone_of(group)
+    counts = summarize(group["alerts"])
+    badges = [(f"{n} {sev}", sev) for sev, n in counts.items() if n]
+    issues = [(x.severity, short_label(x), x.evidence)
+              for x in sorted(group["alerts"], key=lambda x: SEVERITY_ORDER[x.severity])]
+    icons = demand_icons_html(group["demands"]) if group["demands"] else ""
+    return business_card_html(group["name"], group["subtitle"], tone, STATUS_LABEL[tone],
+                              badges, issues, icons)
+
+
+def has_urgent(group) -> bool:
+    """Per il filtro: solo critical e warning contano come 'problema'."""
+    return any(x.severity in ("critical", "warning") for x in group["alerts"])
+
+
 def render_alerts_section(bundle) -> None:
-    """Sezione completa: alert raggruppati per business + griglia delle customer demands."""
+    """Your Businesses: una card per business in griglia; 'Details' apre il dettaglio."""
     st.header("Your Businesses")
 
     if bundle is None or bundle.snapshot is None:
@@ -82,48 +152,21 @@ def render_alerts_section(bundle) -> None:
         )
         return
 
-    alerts = _get_alerts(bundle)
-    if not alerts:
-        st.success("No issues found. Everything looks healthy.")
-    else:
-        counts = summarize(alerts)
-        c1, c2, c3 = st.columns(3)
-        c1.metric(f"{SEVERITY_ICON['critical']} Critical", counts["critical"])
-        c2.metric(f"{SEVERITY_ICON['warning']} Warnings", counts["warning"])
-        c3.metric(f"{SEVERITY_ICON['info']} Info", counts["info"])
+    alerts = [x for x in _get_alerts(bundle) if x.code not in SUPPLY_CODES]
+    counts = summarize(alerts)
+    st.caption(
+        f"{counts['critical']} critical · {counts['warning']} warning · {counts['info']} info. "
+        "The coloured edge shows each business's most urgent problem. Icons = customer demands "
+        "(green met, red crossed missing): hover an icon for its name. "
+        "Click \"+N more\" inside a card to see the rest of its issues."
+    )
+    only_issues = st.toggle("Only critical and warning", key="hc_only_issues",
+                            help="Hide businesses that only have info notes or no issues.")
 
-        shown = st.multiselect(
-            "Show",
-            options=list(SEVERITY_ORDER),
-            default=list(SEVERITY_ORDER),
-            format_func=lambda s: f"{SEVERITY_ICON[s]} {s.title()}",
-            key="hc_alert_severity_filter",
-        )
-        visible = [a for a in alerts if a.severity in shown]
-
-        # Raggruppa per business mantenendo l'ordine (i business col problema
-        # più grave vengono prima, perché gli alert arrivano già ordinati).
-        groups: dict[str, list] = {}
-        for a in visible:
-            groups.setdefault(a.business, []).append(a)
-
-        for business, items in groups.items():
-            worst = min(items, key=lambda a: SEVERITY_ORDER[a.severity]).severity
-            label = f"{SEVERITY_ICON[worst]} {business} — {len(items)} issue{'s' if len(items) > 1 else ''}"
-            with st.expander(label, expanded=(worst == "critical")):
-                for a in items:
-                    st.markdown(f"{SEVERITY_ICON[a.severity]} **{a.message}** — {a.evidence}")
-
-    # Griglia customer demands: ✅ soddisfatta, ❌ mancante, vuoto = non richiesta
-    status = demand_status(bundle.snapshot, build_context(bundle.snapshot))
-    if not status.empty:
-        st.subheader("Customer Demands")
-        status = status.assign(mark=status["fulfilled"].map({True: "✅", False: "❌"}))
-        grid = status.pivot_table(
-            index="business", columns="demand", values="mark", aggfunc="first"
-        ).fillna("")
-        st.dataframe(grid, use_container_width=True)
-        st.caption(
-            "✅ met · ❌ missing · empty = not required for this business type. "
-            "Requirements come from the game data; what's met comes from your save."
-        )
+    groups = business_groups(bundle, alerts)
+    if only_issues:
+        groups = [g for g in groups if has_urgent(g)]
+    if not groups:
+        st.success("No critical or warning issues. Everything looks healthy.")
+        return
+    st.html(business_grid_html([business_card(g) for g in groups]))

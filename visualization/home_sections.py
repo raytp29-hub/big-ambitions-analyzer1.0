@@ -70,7 +70,7 @@ def render_overview(df: pd.DataFrame, source: str | None = None) -> None:
         sub = f'<div class="ba-delta"><b>{arrow} ${abs(change):,.0f}</b> in {span} days</div>'
     c4 = kpi_card_html(
         "💰 Final balance", f"${balance.iloc[-1]:,.0f}" if len(balance) else "$0",
-        sub=sub, graphic=area_svg(balance.tolist()), tone=tone,
+        sub=sub, graphic=area_svg(balance.tolist(), tone), tone=tone,
         help="Area = your balance at the end of each game day.",
     )
     st.html(kpi_row_html([c1, c2, c3, c4]))
@@ -363,7 +363,7 @@ def traffic_kpis(hr: pd.DataFrame, agg: pd.DataFrame, single: bool,
     c2 = kpi_card_html(
         "👥 Avg customers / hour", f"{per_open_hour:,.1f}",
         sub=f'<div class="ba-delta">≈ {per_day.mean():,.0f} customers per day</div>',
-        graphic=area_svg(per_day.tolist()),
+        graphic=area_svg(per_day.tolist(), "info"),
         help="Average customers in an open hour, per business. Area = total customers per game day.",
         tone="info",
     )

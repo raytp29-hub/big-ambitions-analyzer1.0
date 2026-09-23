@@ -131,8 +131,7 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-icon.ba-miss {{ box-shadow: inset 0 0 0 1.5px var(--ba-tone); }}
 .ba-icon.ba-miss::after {{ content: ""; position: absolute; width: 24px; height: 1.5px;
   background: var(--ba-tone); transform: rotate(-45deg); }}
-.ba-icon svg {{ width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8;
-  stroke-linecap: round; stroke-linejoin: round; }}
+.ba-icon img {{ width: 18px; height: 18px; display: block; }}
 .ba-tip {{ position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%);
   background: #111; color: #fff; font-size: 0.75rem; padding: 4px 8px; border-radius: 5px;
   white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 10; }}
@@ -146,6 +145,8 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-kpi {{ display: flex; flex-direction: column; min-height: 178px; }}
 .ba-kpi .ba-label {{ color: var(--ba-muted); font-size: 0.85rem; display: flex; justify-content: space-between; }}
 .ba-kpi .ba-q {{ cursor: help; color: var(--ba-muted); display: inline-flex; align-items: center; }}
+.ba-i {{ display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%;
+  border: 1.4px solid currentColor; font: 700 9.5px/1 Georgia, serif; box-sizing: border-box; }}
 .ba-kpi .ba-q:hover {{ color: var(--ba-ink); }}
 .ba-kpi .ba-graphic {{ margin-top: auto; padding-top: 10px; }}
 .ba-cols {{ display: flex; align-items: flex-end; gap: 3px; height: 44px; }}
@@ -166,6 +167,23 @@ table.ba-table .ba-right {{ text-align: right; }}
 .ba-cols > i.ba-hl {{ background: var(--ba-warning); opacity: 1; }}
 .ba-note {{ border-left: 3px solid var(--ba-info); background: color-mix(in srgb, var(--ba-info) 10%, transparent);
   padding: 10px 14px; border-radius: 4px; font-size: 0.88rem; line-height: 1.45; margin: 12px 0; }}
+.ba-biz {{ border-left: 3px solid var(--ba-tone); min-height: 150px; }}
+.ba-biz .ba-hd {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }}
+.ba-biz .ba-badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }}
+.ba-biz .ba-none {{ font-size: 0.8rem; color: var(--ba-muted); margin-top: 10px; }}
+.ba-bizgrid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }}
+@media (max-width: 900px) {{ .ba-bizgrid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+@media (max-width: 600px) {{ .ba-bizgrid {{ grid-template-columns: 1fr; }} }}
+.ba-issues {{ list-style: none; margin: 10px 0 0; padding: 0; }}
+.ba-issues li {{ font-size: 0.82rem; line-height: 1.35; padding: 5px 0; margin: 0;
+  border-top: 1px solid var(--ba-line); }}
+.ba-issues li b {{ font-weight: 600; }}
+.ba-more summary {{ cursor: pointer; font-size: 0.8rem; color: var(--ba-muted); padding: 6px 0 0;
+  list-style: none; }}
+.ba-more summary::-webkit-details-marker {{ display: none; }}
+.ba-more summary::after {{ content: " ▾"; }}
+.ba-more[open] summary::after {{ content: " ▴"; }}
+.ba-more summary:hover {{ color: var(--ba-ink); }}
 .ba-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }}
 .ba-delta {{ font: 0.8rem var(--ba-mono); color: var(--ba-muted); }}
 .ba-delta b {{ color: var(--ba-tone); font-weight: 600; }}
@@ -177,6 +195,20 @@ table.ba-table .ba-right {{ text-align: right; }}
 def inject_css() -> None:
     """Da chiamare una volta per pagina, prima dei componenti."""
     st.html(f"<style>{css()}</style>")
+
+
+# st.html passa l'HTML da DOMPurify con il profilo "html": gli <svg> inline vengono
+# tolti (niente icone, niente sparkline). Un <img src="data:image/svg+xml;base64,...">
+# invece passa. Dentro un'immagine però le variabili CSS non esistono: i colori
+# vanno scritti nell'SVG (TONE_HEX, stessi valori di TOKENS).
+TONE_HEX = {"critical": "#d03b3b", "warning": "#fab219", "info": "#2a78d6",
+            "ok": "#0ca30c", "neutral": "#8a8985"}
+
+
+def svg_img(svg: str, cls: str = "", alt: str = "") -> str:
+    import base64
+    data = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f'<img class="{cls}" alt="{escape(alt)}" src="data:image/svg+xml;base64,{data}">'
 
 
 def _tone(tone: str) -> str:
@@ -321,9 +353,12 @@ def demand_icons_html(items: list[tuple[str, str, bool]]) -> str:
         tone = "ok" if met else "critical"
         state = "met" if met else "missing"
         miss = "" if met else " ba-miss"
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+               f'stroke="{TONE_HEX[tone]}" stroke-width="1.8" stroke-linecap="round" '
+               f'stroke-linejoin="round"><path d="{path}"/></svg>')
         icons.append(
-            f'<span class="ba-icon{miss}" {_tone(tone)} aria-label="{escape(label)}: {state}">'
-            f'<svg viewBox="0 0 24 24"><path d="{path}"/></svg>'
+            f'<span class="ba-icon{miss}" {_tone(tone)} title="{escape(label)}: {state}">'
+            f'{svg_img(svg, alt=f"{label}: {state}")}'
             f'<span class="ba-tip">{escape(label)} · {state}</span></span>'
         )
     return f'<div class="ba-icons">{"".join(icons)}</div>'
@@ -395,9 +430,8 @@ def delta_tone(delta: Optional[float]) -> str:
     return "ok" if delta > 0 else "critical"
 
 
-def sparkline_svg(values: list, width: int = 100, height: int = 30) -> str:
-    """Linea SVG (viewBox 100×30, stirata sulla larghezza della card).
-    Il colore arriva dal tono dell'elemento padre (--ba-tone)."""
+def sparkline_svg(values: list, tone: str = "neutral", width: int = 100, height: int = 30) -> str:
+    """Linea (viewBox 100×30, stirata sulla larghezza della card), come immagine SVG."""
     if len(values) < 2:
         return ""
     lo, hi = min(values), max(values)
@@ -407,9 +441,10 @@ def sparkline_svg(values: list, width: int = 100, height: int = 30) -> str:
         f"{i * width / (len(values) - 1):.1f},{height - pad - (v - lo) / span * (height - 2 * pad):.1f}"
         for i, v in enumerate(values)
     )
-    return (f'<svg class="ba-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none">'
-            f'<polyline points="{points}" fill="none" stroke="var(--ba-tone)" stroke-width="1.6" '
-            f'vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>')
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" preserveAspectRatio="none">'
+           f'<polyline points="{points}" fill="none" stroke="{TONE_HEX[tone]}" stroke-width="1.6" '
+           f'vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>')
+    return svg_img(svg, "ba-spark")
 
 
 def revenue_card_html(business: str, total: float, share: float,
@@ -428,7 +463,7 @@ def revenue_card_html(business: str, total: float, share: float,
         f'<div class="ba-bar" style="margin-top:10px;--ba-tone:var(--ba-ok)">'
         f'<i style="width:{max(share, 0.0) * 100:.1f}%"></i></div>'
         f'<div class="ba-muted ba-small" style="margin-top:4px">{share:.0%} of total revenue</div>'
-        f'{sparkline_svg(daily)}</div>'
+        f'{sparkline_svg(daily, tone)}</div>'
     )
 
 
@@ -451,11 +486,9 @@ def render_revenue_cards(rows: list, window: int = 7) -> None:
 _WEEKDAY = "MTWTFSS"   # giorno di gioco → (day - 1) % 7, 0 = lunedì (vedi staffing_fit)
 
 
-# Icona "info" disegnata in SVG: il carattere ⓘ a 13px usciva sgranato su Windows.
-_INFO_ICON = ('<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">'
-              '<circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.3"/>'
-              '<line x1="8" y1="7.2" x2="8" y2="11.2" stroke="currentColor" stroke-width="1.5" '
-              'stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>')
+# Icona "info": cerchio + "i" disegnati in CSS (il carattere ⓘ usciva sgranato,
+# e gli <svg> inline vengono tolti da st.html).
+_INFO_ICON = '<span class="ba-i">i</span>'
 
 
 def kpi_card_html(label: str, value: str, graphic: str = "", sub: str = "",
@@ -522,8 +555,8 @@ def composition_html(parts: list[tuple[str, float]], top: int = 4,
     return f'<div class="ba-stack">{"".join(segs)}</div><div class="ba-legend">{"".join(legend)}</div>'
 
 
-def area_svg(values: list, width: int = 100, height: int = 40) -> str:
-    """Area + linea (saldo): colore dal tono della card padre."""
+def area_svg(values: list, tone: str = "info", width: int = 100, height: int = 40) -> str:
+    """Area + linea (saldo, clienti per giorno), come immagine SVG."""
     if len(values) < 2:
         return ""
     lo, hi = min(values), max(values)
@@ -532,10 +565,12 @@ def area_svg(values: list, width: int = 100, height: int = 40) -> str:
            for i, v in enumerate(values)]
     line = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
     area = f"0,{height} {line} {width},{height}"
-    return (f'<svg class="ba-area" viewBox="0 0 {width} {height}" preserveAspectRatio="none">'
-            f'<polygon points="{area}" fill="var(--ba-tone)" fill-opacity="0.15"/>'
-            f'<polyline points="{line}" fill="none" stroke="var(--ba-tone)" stroke-width="1.6" '
-            f'vector-effect="non-scaling-stroke"/></svg>')
+    color = TONE_HEX[tone]
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" preserveAspectRatio="none">'
+           f'<polygon points="{area}" fill="{color}" fill-opacity="0.18"/>'
+           f'<polyline points="{line}" fill="none" stroke="{color}" stroke-width="1.6" '
+           f'vector-effect="non-scaling-stroke"/></svg>')
+    return svg_img(svg, "ba-area")
 
 
 def hour_columns_html(values: list, highlight: Optional[int] = None) -> str:
@@ -558,3 +593,42 @@ def note_html(html_text: str) -> str:
 
 def render_note(html_text: str) -> None:
     st.html(note_html(html_text))
+
+
+# ============================================================================
+# CARD BUSINESS (Health Check → Your Businesses)
+# ============================================================================
+
+CARD_ISSUES = 3   # problemi visibili nella card; gli altri dentro "+N more" (espandibile)
+
+
+def _issue_line(severity: str, label: str, evidence: str) -> str:
+    ev = f' <span class="ba-muted">— {escape(evidence)}</span>' if evidence else ""
+    return f'<li {_tone(severity)}><span class="ba-dot"></span><b>{escape(label)}</b>{ev}</li>'
+
+
+def business_card_html(name: str, subtitle: str, tone: str, status: str,
+                       badges: list[tuple[str, str]], issues: list[tuple[str, str, str]],
+                       icons: str = "") -> str:
+    """Card di un business: bordo sinistro = gravità peggiore, badge di stato, conteggi,
+    i problemi (gravità, etichetta, dato) — i primi CARD_ISSUES in vista, gli altri in un
+    <details> dentro la card — e le icone delle customer demands."""
+    badge_row = "".join(badge_html(text, t) for text, t in badges)
+    first = "".join(_issue_line(*i) for i in issues[:CARD_ISSUES])
+    rest = issues[CARD_ISSUES:]
+    more = ""
+    if rest:
+        more = (f'<details class="ba-more"><summary>+{len(rest)} more</summary>'
+                f'<ul class="ba-issues">{"".join(_issue_line(*i) for i in rest)}</ul></details>')
+    body = (f'<ul class="ba-issues">{first}</ul>{more}' if issues
+            else '<div class="ba-none">No issues found.</div>')
+    return (
+        f'<div class="ba-card ba-biz" {_tone(tone)}>'
+        f'<div class="ba-hd"><h4>{escape(name)}</h4>{badge_html(status, tone)}</div>'
+        f'<div class="ba-muted ba-small">{escape(subtitle)}</div>'
+        f'<div class="ba-badges">{badge_row}</div>{body}{icons}</div>'
+    )
+
+
+def business_grid_html(cards: list[str]) -> str:
+    return f'<div class="ba-bizgrid">{"".join(cards)}</div>'
