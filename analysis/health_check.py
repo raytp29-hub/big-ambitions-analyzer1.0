@@ -247,6 +247,7 @@ class MiniFurniture:
     price: float
     capacity: float
     is_workstation: bool
+    products: List[str] = field(default_factory=list)   # prodotti chiave per cui è stato scelto
     
 
 @dataclass
@@ -290,11 +291,13 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
     furnitures = get_furniture_for_business(biz_name)
     
     needed_furniture = {}
-    
+    products_of = {}          # item_name → prodotti chiave che quell'arredo serve (solo informativo)
+
     for p in core_products:
         for f in furnitures:
             if p.name in f["can_showcase"]:
                 needed_furniture[f["item_name"]] = f
+                products_of.setdefault(f["item_name"], []).append(p.name)
                 break
             
             
@@ -323,7 +326,8 @@ def compute_bep(biz_name:str, building_cap: int, traffic: int, daily_rent: float
             quantity= qty,
             price= f["price"],
             capacity= f["added_customers_per_hour"],
-            is_workstation= f["is_workstation"]
+            is_workstation= f["is_workstation"],
+            products= products_of.get(f["item_name"], []),
         ))
         
         

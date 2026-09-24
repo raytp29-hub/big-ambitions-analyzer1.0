@@ -18,7 +18,8 @@ from analysis.business_alerts import (
     NON_CUSTOMER_TYPES, SAT_WARNING, _street_label, build_context, demand_status,
 )
 from analysis.business_fit import (
-    WINDOW_DAYS, evaluate_business, open_hours_by_day, wage_shares,
+    WINDOW_DAYS, core_products_for, evaluate_business, menu_actions, open_hours_by_day,
+    wage_shares,
 )
 from analysis.staffing_fit import evaluate_staffing, staffing_to_df
 from visualization.staffing_heatmap import staffing_heatmap_spec
@@ -293,7 +294,29 @@ def _row_action(r) -> tuple[str, str, str] | None:
     return None
 
 
-def _render_action_plan(bundle, address, rows, staffing, hours_tips) -> None:
+def _names(items: list) -> str:
+    """['A'] → 'A', ['A','B'] → 'A and B', ['A','B','C'] → 'A, B and C'."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _menu_item(a) -> tuple[str, str, str]:
+    """MenuAction → voce del piano."""
+    what = _names(a.products)
+    if a.furniture:
+        tone = "critical"
+        title = f"Add {what} to the menu"
+        detail = (f"buy {a.buy} × {a.furniture} ({a.capacity:g}/h each), then stock "
+                  f"{'it' if len(a.products) == 1 else 'them'}: core product"
+                  f"{'' if len(a.products) == 1 else 's'} for this business type.")
+    else:
+        tone = "warning"
+        title = f"Stock {what}"
+        detail = (f"you already have the {a.equipment}: " if a.equipment else "") + \
+                 f"core product{'' if len(a.products) == 1 else 's'} for this business type."
+    return tone, title, detail
+
+
+def _render_action_plan(bundle, address, rows, staffing, hours_tips, menu=()) -> None:
     """Mini report: le azioni più utili, prese da tutte le sezioni della pagina, in ordine."""
     items = []
     # 1. customer demands mancanti
@@ -302,13 +325,22 @@ def _render_action_plan(bundle, address, rows, staffing, hours_tips) -> None:
     if missing:
         items.append(("critical", "Add the missing customer demands",
                       ", ".join(missing) + ": customers expect them and satisfaction drops without."))
-    # 2. arredi e prodotti mancanti (righe "fix" prima, poi "watch")
+    # 2. prodotti chiave mancanti, raggruppati con il loro arredo ("Add Pizza to the menu"),
+    #    poi gli altri arredi e prodotti (righe "fix" prima, poi "watch")
+    covered = {a.furniture for a in menu if a.furniture}
+    items += [_menu_item(a) for a in menu if a.furniture]
     for want in ("bad", "warn"):
         for r in rows:
-            if r.status == want and r.metric not in OUTCOME_METRICS:
-                act = _row_action(r)
-                if act:
-                    items.append(act)
+            if r.status != want or r.metric in OUTCOME_METRICS:
+                continue
+            if menu and r.metric == "Core products sold":
+                continue                              # già detto dalle azioni menu
+            if r.metric.startswith("Furniture · ") and r.metric.split(" · ", 1)[1] in covered:
+                continue
+            act = _row_action(r)
+            if act:
+                items.append(act)
+    items += [_menu_item(a) for a in menu if not a.furniture]
     # 3. orari: il consiglio più utile per tipo
     for kind in ("closed_day", "open_more", "close"):
         tip = next((t for t in hours_tips if t.kind == kind), None)
@@ -397,7 +429,8 @@ def _render_my_business(bundle) -> None:
     _render_hours_advice(hours_tips)
 
     # --- Mini report: le cose da fare, in ordine ---
-    _render_action_plan(bundle, address, rows, staffing, hours_tips)
+    menu = menu_actions(bep, rows, core_products_for(profile.biz_name), actual.items_sold)
+    _render_action_plan(bundle, address, rows, staffing, hours_tips, menu)
 
 
 def _ui_theme() -> str:
