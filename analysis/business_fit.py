@@ -486,6 +486,50 @@ def _station_role_lookup(biz_name: str):
     return role_of
 
 
+@dataclass
+class MenuAction:
+    """Un prodotto chiave (o più) da aggiungere al menu, con l'arredo che serve."""
+    products: list            # prodotti chiave mancanti
+    furniture: Optional[str]  # arredo da comprare; None = niente da comprare
+    buy: int = 0              # quanti pezzi mancano
+    capacity: float = 0       # clienti/ora per pezzo
+    equipment: Optional[str] = None   # arredo del modello che hai già (solo da rifornire)
+
+
+def menu_actions(bep, rows: list[FitRow], core_products: list, items_sold) -> list[MenuAction]:
+    """Prodotti chiave non venduti → una azione per arredo, invece di righe separate.
+
+    Il modello sceglie un arredo PER un prodotto (Pizza → Pizza Oven): se il prodotto
+    manca, comprare l'arredo e metterlo in vendita sono la stessa decisione.
+    """
+    missing = [label for key, label in core_products if key not in items_sold]
+    if not missing or bep is None:
+        return []
+    have_need = {}                                    # nome arredo → (theory, actual) dalla tabella
+    for r in rows:
+        if r.metric.startswith("Furniture · "):
+            try:
+                have_need[r.metric.split(" · ", 1)[1]] = (int(r.theory), int(r.actual))
+            except ValueError:
+                pass
+    actions, linked = [], set()
+    for f in bep.furniture:
+        prods = [p for p in getattr(f, "products", []) if p in missing]
+        if not prods:
+            continue
+        linked.update(prods)
+        need, have = have_need.get(f.name, (f.quantity, 0))
+        buy = max(need - have, 0)
+        if buy:
+            actions.append(MenuAction(prods, f.name, buy, f.capacity))
+        else:
+            actions.append(MenuAction(prods, None, equipment=f.name))
+    rest = [p for p in missing if p not in linked]    # nessun arredo dedicato nel modello
+    if rest:
+        actions.append(MenuAction(rest, None))
+    return actions
+
+
 def fit_to_df(rows: list[FitRow]) -> pd.DataFrame:
     return pd.DataFrame(
         [{"": STATUS_ICON[r.status], "Metric": r.metric, "Theory": r.theory,
