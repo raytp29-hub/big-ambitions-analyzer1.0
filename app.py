@@ -33,7 +33,7 @@ from core.session_state_manager import init_global_session_state
 from telemetry.events import (
     enabled as telemetry_enabled, log_event, log_once, log_page_view, start_session,
 )
-from telemetry.feedback import render_feedback
+from telemetry.feedback import render_feedback_button
 from pathlib import Path
 
 
@@ -190,6 +190,9 @@ The `.hsg` file is only read, never changed.
                     st.rerun()
                 except ValueError as e:
                     st.error(f"Error loading sample: {e}")
+
+    # Feedback: bottone che apre una finestra (st.dialog), sotto la demo
+    render_feedback_button(page_key)
 
     # Status attuale
     if st.session_state.df is not None:
@@ -1025,8 +1028,6 @@ else:
             st.dataframe(filtered_df, use_container_width=True, height=300)
 
 
-
-render_feedback(page_key)
 
 # Footer
 st.divider()
