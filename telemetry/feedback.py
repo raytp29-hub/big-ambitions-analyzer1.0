@@ -12,9 +12,19 @@ import streamlit as st
 from telemetry.events import enabled, log_event
 
 # Stored as keys, not labels: labels can change, old rows stay readable.
+# Never reuse a key with a new meaning: old rows keep the old one.
+# "factory_planning" (until v3.0) meant the planner that already exists;
+# "factory_from_save" is the new idea.
 NEXT_FEATURES = {
     "supply_chain": "Supply chain page",
-    "factory_planning": "Factory planning",
+    "factory_from_save": "Factory from your save",
+}
+# One line per feature, same keys as NEXT_FEATURES, shown under the pills.
+FEATURE_HELP = {
+    "supply_chain": "Imports, warehouses and deliveries to your shops in one place: "
+                    "paused imports, items that run out, stock that isn't moving.",
+    "factory_from_save": "Load your factory from the save (machines, workers, recipes) "
+                         "and check if production covers what your shops sell.",
 }
 OTHER_KEY, OTHER_LABEL = "other", "Something else"
 OTHER_MAX_CHARS = 300
@@ -40,6 +50,7 @@ def _feedback_form(page: str) -> None:
     options = list(NEXT_FEATURES.values()) + [OTHER_LABEL]
     topics = st.pills("What should come next?", options,
                       selection_mode="multi", key="fb_topics") or []
+    st.caption("  \n".join(f"**{NEXT_FEATURES[k]}**: {text}" for k, text in FEATURE_HELP.items()))
     other = ""
     if OTHER_LABEL in topics:
         other = st.text_area("What would you like?", max_chars=OTHER_MAX_CHARS,
